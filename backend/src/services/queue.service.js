@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Lead, LeadAnalysis } from '../models/Lead.js';
 import { Message } from '../models/Message.js';
 import { Campaign } from '../models/Campaign.js';
@@ -22,6 +23,11 @@ class QueueService {
 
     // Run interval every 25 seconds
     this.interval = setInterval(async () => {
+      // Guard: Only run background queue if MongoDB connection is active
+      if (mongoose.connection.readyState !== 1) {
+        return;
+      }
+
       await this.checkDailyScheduledDiscovery();
       await this.processAutoApprovals();
       await this.processApprovedOutreachQueue();
@@ -102,35 +108,43 @@ class QueueService {
     }
   }
 
-  // Execution cycle for 50 Real Business Leads across niches & countries
-  async runDaily50LeadsCycle() {
+  // Execution cycle for 40 Real Business Leads across niches & countries
+  async runDaily40LeadsCycle(force = false) {
+    let createdCount = 0;
+    const targetGoal = 40;
     try {
-      // 🛡️ Double Check: Don't run AI discovery if manual leads are waiting
-      const manualCount = await this.getUnprocessedManualCount();
-      if (manualCount > 0) {
-        console.log(`⏸️ Skipping AI Lead Cycle: ${manualCount} Manual Leads are currently being processed.`);
-        return;
+      // Priority Guard (Only check if not forced manually)
+      if (!force) {
+        const manualCount = await this.getUnprocessedManualCount();
+        if (manualCount > 0) {
+          console.log(`⏸️ Skipping AI Lead Cycle: ${manualCount} Manual Leads are currently being processed.`);
+          return 0;
+        }
       }
 
-      const targetCountries = ['India', 'USA', 'UK', 'UAE'];
+      const targetCountries = ['India', 'USA', 'UK', 'UAE', 'Canada', 'Australia'];
       const targetNiches = [
+        'Dental Healthcare',
+        'Cosmetic & Dermatology',
+        'Luxury Real Estate',
         'Restaurants & Cafes',
-        'Dental & Healthcare Clinics',
-        'Salons & Wellness',
-        'Banquet & Event Spaces',
-        'Luxury Real Estate'
+        'Banquet & Event Spaces'
       ];
 
+      // Phase 1: Curated Verified Business Directory
       for (const country of targetCountries) {
+        if (createdCount >= targetGoal) break;
         for (const niche of targetNiches) {
+          if (createdCount >= targetGoal) break;
           const realBusinesses = await realLeadScraper.getVerifiedBusinesses(country, niche);
           for (const biz of realBusinesses) {
-            // DNS MX check
+            if (createdCount >= targetGoal) break;
             const check = await emailValidator.verifyEmail(biz.email);
             if (!check.valid) continue;
 
             let lead = await Lead.findOne({ email: check.email });
             if (!lead) {
+              createdCount++;
               const hasWebsite = Boolean(biz.website && biz.website.startsWith('http'));
               lead = new Lead({
                 business_name: biz.business_name,
@@ -142,7 +156,7 @@ class QueueService {
                 state: biz.state,
                 country: biz.country,
                 source: `Daily Verified Outreach (${country})`,
-                lead_score: hasWebsite ? Math.floor(Math.random() * 12) + 80 : 94, // High score if NO website
+                lead_score: hasWebsite ? Math.floor(Math.random() * 12) + 80 : 94,
                 status: 'APPROVED'
               });
               await lead.save();
@@ -172,7 +186,6 @@ class QueueService {
               lead.analysis = analysis._id;
               await lead.save();
 
-              // Auto-generate cold pitch
               const emailDraft = await aiService.generateOutreachEmail({ lead, analysis });
               await Message.create({
                 lead_id: lead._id,
@@ -181,7 +194,7 @@ class QueueService {
                 type: 'INITIAL',
                 subject: emailDraft.subject,
                 content: emailDraft.body,
-                status: 'APPROVED', // Ready to send on schedule
+                status: 'APPROVED',
                 approval_source: 'AUTO_CAMPAIGN',
                 ai_generated: true
               });
@@ -189,10 +202,91 @@ class QueueService {
           }
         }
       }
-      console.log('✅ Daily Autonomous 50 Real Lead Discovery cycle completed!');
+
+      // Phase 2: If more leads needed to reach 40, loop AI Discovery across global hubs
+      const discoveryCities = ['Austin', 'New York', 'London', 'Dubai', 'Toronto', 'Sydney', 'Miami', 'Mumbai', 'Indore', 'Bangalore'];
+      let cityIndex = 0;
+
+      while (createdCount < targetGoal && cityIndex < discoveryCities.length) {
+        const city = discoveryCities[cityIndex];
+        const country = cityIndex % 2 === 0 ? 'USA' : 'India';
+        cityIndex++;
+
+        try {
+          const aiDiscovered = await aiService.discoverLeadsWithAI({
+            country,
+            industry: 'Dental Healthcare & Aesthetics',
+            count: Math.min(targetGoal - createdCount + 4, 15),
+            city
+          });
+
+          for (const item of (aiDiscovered || [])) {
+            if (createdCount >= targetGoal) break;
+            const check = await emailValidator.verifyEmail(item.email);
+            if (!check.valid) continue;
+
+            let lead = await Lead.findOne({ email: check.email });
+            if (!lead) {
+              createdCount++;
+              lead = new Lead({
+                business_name: item.business_name,
+                industry: 'Dental & Aesthetics',
+                website: item.website || '',
+                email: check.email,
+                phone: item.phone || '',
+                city: item.city || city,
+                state: item.state || '',
+                country: item.country || country,
+                source: `Daily Autonomous AI Discovery (${city})`,
+                lead_score: item.estimated_score || 88,
+                status: 'APPROVED'
+              });
+              await lead.save();
+
+              const analysis = new LeadAnalysis({
+                lead_id: lead._id,
+                website_exists: Boolean(item.website),
+                pain_points: item.pain_points || ['No automated booking workflow'],
+                opportunities: item.opportunities || ['Modern Web Redesign & Booking Funnel'],
+                recommended_services: ['Web App Development', 'AI Appointment Booking CRM'],
+                ai_summary: item.ai_summary || `${item.business_name} in ${item.city || city} is a qualified target for digital modernization.`,
+                ai_score: lead.lead_score
+              });
+              await analysis.save();
+
+              lead.analysis = analysis._id;
+              await lead.save();
+
+              const emailDraft = await aiService.generateOutreachEmail({ lead, analysis });
+              await Message.create({
+                lead_id: lead._id,
+                channel: 'EMAIL',
+                direction: 'OUTBOUND',
+                type: 'INITIAL',
+                subject: emailDraft.subject,
+                content: emailDraft.body,
+                status: 'APPROVED',
+                approval_source: 'AUTO_CAMPAIGN',
+                ai_generated: true
+              });
+            }
+          }
+        } catch (aiErr) {
+          console.warn(`Phase 2 AI discovery cycle for ${city} notice:`, aiErr.message);
+        }
+      }
+
+      console.log(`✅ Daily Autonomous 40 Real Lead Discovery cycle completed! (${createdCount} new verified leads captured)`);
+      return createdCount;
     } catch (err) {
       console.error('Error running daily lead cycle:', err.message);
+      return 0;
     }
+  }
+
+  // Alias for backward compatibility
+  async runDaily50LeadsCycle(force = false) {
+    return this.runDaily40LeadsCycle(force);
   }
 
   // Send approved emails via email service (spaced out safely, prioritizing manual leads)

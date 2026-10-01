@@ -9,6 +9,7 @@ import { InboxView } from './pages/InboxView';
 import { DealsKanbanView } from './pages/DealsKanbanView';
 import { SettingsView } from './pages/SettingsView';
 import { ApiGuideView } from './pages/ApiGuideView';
+import { AiPostIngestorView } from './pages/AiPostIngestorView';
 import { LeadDrawer } from './components/LeadDrawer';
 import { ApprovalModal } from './components/ApprovalModal';
 import { NewLeadModal } from './components/NewLeadModal';
@@ -107,6 +108,16 @@ export function App() {
       fetchAllData();
     } catch (e) {
       alert(`Discovery error: ${e.message}`);
+    }
+  };
+
+  const handleTriggerDailyLeads = async () => {
+    try {
+      const res = await api.triggerDailyLeads();
+      alert(res.message || '50 Verified leads fetched & added to CRM directory!');
+      fetchAllData();
+    } catch (e) {
+      alert(`Error fetching daily leads: ${e.message}`);
     }
   };
 
@@ -213,6 +224,7 @@ export function App() {
   // Header titles
   const titles = {
     dashboard: { title: 'AI Outreach Command Center', sub: 'Autonomous pipeline metrics & conversion telemetry' },
+    post_ingestor: { title: 'AI Lead & Proposal Ingestor', sub: 'Instant parsing for LinkedIn, Meta, Upwork posts with 100% human-toned emotional proposals' },
     campaigns: { title: 'Campaigns', sub: 'Targeted niche sequences & pacing settings' },
     leads: { title: 'Leads & Discovery Layer', sub: 'AI audit observations, opportunity scoring & lead directory' },
     approvals: { title: 'Approval Queue', sub: 'Human-in-the-loop review safety gate for cold pitches' },
@@ -261,6 +273,12 @@ export function App() {
             />
           )}
 
+          {activeTab === 'post_ingestor' && (
+            <AiPostIngestorView
+              onLeadAdded={fetchAllData}
+            />
+          )}
+
           {activeTab === 'campaigns' && (
             <CampaignsView
               campaigns={campaigns}
@@ -277,6 +295,7 @@ export function App() {
               onDeleteLead={handleDeleteLead}
               onSeedDemo={handleSeedDemo}
               onAiDiscover={handleAiDiscover}
+              onTriggerDailyLeads={handleTriggerDailyLeads}
             />
           )}
 

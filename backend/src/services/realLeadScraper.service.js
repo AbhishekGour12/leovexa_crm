@@ -380,12 +380,21 @@ class RealLeadScraperService {
       Australia: {
         'Dental Healthcare': [
           {
-            business_name: 'Sydney Harbour Dental Studio',
-            website: 'https://www.sydneyharbourdental.com.au',
-            email: 'info@sydneyharbourdental.com.au',
+            business_name: 'Sydney Dental Practice Martin Place',
+            website: 'https://www.sydneydentalpractice.com.au',
+            email: 'admin@sydneydentalpractice.com.au',
             phone: '+61 2 9232 4433',
             city: 'Sydney',
             state: 'New South Wales',
+            country: 'Australia'
+          },
+          {
+            business_name: 'Melbourne City Dental Care',
+            website: 'https://www.melbournecitydental.com.au',
+            email: 'info@melbournecitydental.com.au',
+            phone: '+61 3 9654 5855',
+            city: 'Melbourne',
+            state: 'Victoria',
             country: 'Australia'
           }
         ]

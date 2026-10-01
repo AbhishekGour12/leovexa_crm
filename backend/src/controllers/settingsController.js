@@ -103,7 +103,7 @@ export const testGeminiKey = async (req, res) => {
     if (!testKey) return res.status(400).json({ success: false, error: 'Gemini API Key is required' });
 
     const genAI = new GoogleGenerativeAI(testKey);
-    const candidateModels = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-3.8-pro'];
+    const candidateModels = ['gemini-1.5-flash', 'gemini-1.5-pro'];
     let text = '';
     let lastErr = null;
 
@@ -131,7 +131,7 @@ export const testGeminiKey = async (req, res) => {
 
     if (!text && lastErr) throw lastErr;
 
-    res.json({ success: true, message: 'Gemini API (3.8 Flash) is active and functioning perfectly!', response: (text || 'Gemini Connected OK').trim() });
+    res.json({ success: true, message: 'Gemini API (1.5 Flash) is active and functioning perfectly!', response: (text || 'Gemini Connected OK').trim() });
   } catch (error) {
     res.status(400).json({ success: false, error: `Gemini Test Failed: ${error.message}` });
   }
@@ -140,28 +140,49 @@ export const testGeminiKey = async (req, res) => {
 export const testOpenRouterKey = async (req, res) => {
   try {
     const { key } = req.body;
-    const testKey = key || process.env.OPENROUTER_API_KEY;
+    const testKey = (key || process.env.OPENROUTER_API_KEY || '').trim();
     if (!testKey) return res.status(400).json({ success: false, error: 'OpenRouter API Key is required' });
 
-    const response = await axios.post(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        model: 'google/gemini-2.0-flash-exp:free',
-        messages: [{ role: 'user', content: 'Say "OpenRouter Connected OK"' }]
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${testKey}`,
-          'HTTP-Referer': 'https://leovexa.in',
-          'X-Title': 'Leovexa Outreach CRM'
-        },
-        timeout: 15000
-      }
-    );
+    const candidateModels = ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct', 'mistralai/mistral-7b-instruct:free'];
+    let responseText = '';
+    let lastErr = null;
 
-    res.json({ success: true, message: 'OpenRouter API is active and ready as fallback!', response: response.data.choices[0].message.content });
+    for (const model of candidateModels) {
+      try {
+        const response = await axios.post(
+          'https://openrouter.ai/api/v1/chat/completions',
+          {
+            model: model,
+            messages: [{ role: 'user', content: 'Say "OpenRouter Connected OK"' }]
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${testKey}`,
+              'HTTP-Referer': 'https://leovexa.in',
+              'X-Title': 'Leovexa Outreach CRM',
+              'Content-Type': 'application/json'
+            },
+            timeout: 15000
+          }
+        );
+
+        if (response.data && response.data.choices && response.data.choices[0]) {
+          responseText = response.data.choices[0].message.content;
+          break;
+        }
+      } catch (err) {
+        lastErr = err;
+        continue;
+      }
+    }
+
+    if (!responseText) {
+      throw lastErr || new Error('No response from OpenRouter');
+    }
+
+    res.json({ success: true, message: 'OpenRouter API is active and ready as dual-engine!', response: responseText.trim() });
   } catch (error) {
-    res.status(400).json({ success: false, error: `OpenRouter Test Failed: ${error.message}` });
+    res.status(400).json({ success: false, error: `OpenRouter Test Failed: ${error.response ? (error.response.data?.error?.message || error.response.statusText) : error.message}` });
   }
 };
 

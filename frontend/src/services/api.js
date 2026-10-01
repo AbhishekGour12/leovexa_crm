@@ -72,6 +72,31 @@ export const api = {
     return res.json();
   },
 
+  async extractPostLeadsAndProposals(payload) {
+    const res = await fetch(`${API_BASE}/leads/ai-extract-pitch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return res.json();
+  },
+
+  async sendProposalEmail(payload) {
+    const res = await fetch(`${API_BASE}/leads/send-pitch-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return res.json();
+  },
+
+  async triggerDailyLeads() {
+    const res = await fetch(`${API_BASE}/leads/trigger-daily-leads`, {
+      method: 'POST'
+    });
+    return res.json();
+  },
+
   async deleteLead(id) {
     const res = await fetch(`${API_BASE}/leads/${id}`, {
       method: 'DELETE'

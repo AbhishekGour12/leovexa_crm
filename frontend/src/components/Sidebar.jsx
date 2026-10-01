@@ -16,6 +16,7 @@ import {
 export const Sidebar = ({ activeTab, setActiveTab, counts = {} }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'post_ingestor', label: 'AI Post & Pitch Pitcher', icon: Sparkles, badge: 'NEW', alert: false },
     { id: 'campaigns', label: 'Campaigns', icon: Target },
     { id: 'leads', label: 'Leads & Discovery', icon: Users, badge: counts.leads },
     { id: 'approvals', label: 'Approval Queue', icon: CheckCircle2, badge: counts.pending, alert: counts.pending > 0 },

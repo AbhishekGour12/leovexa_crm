@@ -14,7 +14,7 @@ import {
   Eye
 } from 'lucide-react';
 
-export const LeadsView = ({ leads = [], onSelectLead, onOpenNewLead, onTriggerResearch, onDeleteLead, onSeedDemo, onAiDiscover }) => {
+export const LeadsView = ({ leads = [], onSelectLead, onOpenNewLead, onTriggerResearch, onDeleteLead, onSeedDemo, onAiDiscover, onTriggerDailyLeads }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [websiteFilter, setWebsiteFilter] = useState('ALL'); // 'ALL' | 'NO_WEBSITE' | 'HAS_WEBSITE' | 'MANUAL'
@@ -88,7 +88,26 @@ export const LeadsView = ({ leads = [], onSelectLead, onOpenNewLead, onTriggerRe
           </select>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {onTriggerDailyLeads && (
+            <button
+              onClick={onTriggerDailyLeads}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.82rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.15))',
+                border: '1px solid rgba(99, 102, 241, 0.4)',
+                color: '#c7d2fe'
+              }}
+            >
+              <Sparkles size={15} color="#818cf8" />
+              <span>🤖 Fetch Today's 40 Verified Leads</span>
+            </button>
+          )}
+
           <a
             href="/api/leads/download-template"
             download="leovexa_leads_sample_template.csv"
@@ -96,7 +115,7 @@ export const LeadsView = ({ leads = [], onSelectLead, onOpenNewLead, onTriggerRe
             style={{ fontSize: '0.82rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Upload size={14} />
-            <span>📥 Download Excel Template</span>
+            <span>📥 Excel Template</span>
           </a>
           <button onClick={onOpenNewLead} className="btn btn-primary" style={{ fontSize: '0.84rem' }}>
             <Plus size={16} />

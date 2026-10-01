@@ -11,7 +11,10 @@ import {
   downloadDemoTemplate,
   seedDemoData,
   aiDiscoverLeads,
-  clearAllCrmData
+  clearAllCrmData,
+  extractPostLeadsAndProposals,
+  sendProposalEmailDirect,
+  triggerDailyDiscoveryManually
 } from '../controllers/leadController.js';
 import {
   getCampaigns,
@@ -65,6 +68,9 @@ router.post('/leads/import-csv', upload.single('file'), importCsvLeads);
 router.post('/leads/seed-demo', seedDemoData);
 router.post('/leads/ai-discover', aiDiscoverLeads);
 router.post('/leads/clear-all', clearAllCrmData);
+router.post('/leads/ai-extract-pitch', extractPostLeadsAndProposals);
+router.post('/leads/send-pitch-email', sendProposalEmailDirect);
+router.post('/leads/trigger-daily-leads', triggerDailyDiscoveryManually);
 
 // Campaigns
 router.get('/campaigns', getCampaigns);

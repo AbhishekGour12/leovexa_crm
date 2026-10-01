@@ -8,6 +8,7 @@ class AIService {
   constructor() {
     this.geminiKey = process.env.GEMINI_API_KEY || '';
     this.openRouterKey = process.env.OPENROUTER_API_KEY || '';
+    this.callCounter = 0;
   }
 
   updateKeys({ geminiKey, openRouterKey }) {
@@ -15,12 +16,12 @@ class AIService {
     if (openRouterKey !== undefined) this.openRouterKey = openRouterKey;
   }
 
-  async callGemini(prompt, systemInstruction = '', modelName = 'gemini-3.8-flash') {
+  async callGemini(prompt, systemInstruction = '', modelName = 'gemini-1.5-flash') {
     if (!this.geminiKey) {
       throw new Error('GEMINI_API_KEY not configured');
     }
     const genAI = new GoogleGenerativeAI(this.geminiKey);
-    const candidateModels = [modelName, 'gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-3.8-pro'];
+    const candidateModels = [modelName, 'gemini-1.5-flash', 'gemini-1.5-pro'];
     let lastError = null;
 
     for (const m of candidateModels) {
@@ -49,7 +50,7 @@ class AIService {
     throw lastError || new Error('Gemini API call failed');
   }
 
-  async callOpenRouter(prompt, systemInstruction = '', model = 'google/gemini-2.0-flash-exp:free') {
+  async callOpenRouter(prompt, systemInstruction = '', model = 'openrouter/auto') {
     if (!this.openRouterKey) {
       throw new Error('OPENROUTER_API_KEY not configured');
     }
@@ -60,58 +61,99 @@ class AIService {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const response = await axios.post(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        model: model,
-        messages: messages,
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${this.openRouterKey}`,
-          'HTTP-Referer': 'https://leovexa.in',
-          'X-Title': 'Leovexa Outreach CRM',
-          'Content-Type': 'application/json',
-        },
-        timeout: 25000,
-      }
-    );
+    const candidateModels = [model, 'openrouter/auto', 'google/gemini-2.0-flash-exp:free', 'meta-llama/llama-3.3-70b-instruct'];
+    let lastError = null;
 
-    return response.data.choices[0].message.content;
+    for (const m of candidateModels) {
+      try {
+        const response = await axios.post(
+          'https://openrouter.ai/api/v1/chat/completions',
+          {
+            model: m,
+            messages: messages,
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${this.openRouterKey}`,
+              'HTTP-Referer': 'https://leovexa.in',
+              'X-Title': 'Leovexa Outreach CRM',
+              'Content-Type': 'application/json',
+            },
+            timeout: 25000,
+          }
+        );
+
+        if (response.data && response.data.choices && response.data.choices[0]) {
+          return response.data.choices[0].message.content;
+        }
+      } catch (err) {
+        lastError = err;
+        continue; // Try next candidate model
+      }
+    }
+
+    throw lastError || new Error('OpenRouter API call failed');
+  }
+
+  // Smart Rotation: Alternates between Gemini and OpenRouter day-by-day and request-by-request
+  getPreferredProvider() {
+    this.callCounter++;
+    // Check day of year or rotation counter for balanced dual-engine load
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+    const dayCycle = (dayOfYear + this.callCounter) % 2;
+
+    if (dayCycle === 0 && this.geminiKey) {
+      return 'gemini';
+    } else if (this.openRouterKey) {
+      return 'openrouter';
+    } else if (this.geminiKey) {
+      return 'gemini';
+    }
+    return 'system_fallback';
   }
 
   async executeWithFallback(prompt, systemInstruction, task, lead_id = null) {
     const startTime = Date.now();
-    let provider = 'gemini';
+    const primaryEngine = this.getPreferredProvider();
+    const secondaryEngine = primaryEngine === 'gemini' ? 'openrouter' : 'gemini';
+
+    let provider = primaryEngine;
     let outputText = '';
     let success = true;
     let errorMsg = '';
 
-    // Step 1: Try Gemini Primary
+    // Step 1: Try Rotated Primary Engine
     try {
-      if (this.geminiKey) {
+      if (primaryEngine === 'gemini' && this.geminiKey) {
         outputText = await this.callGemini(prompt, systemInstruction);
         provider = 'gemini';
+      } else if (primaryEngine === 'openrouter' && this.openRouterKey) {
+        outputText = await this.callOpenRouter(prompt, systemInstruction);
+        provider = 'openrouter';
       } else {
-        throw new Error('Gemini API key missing');
+        throw new Error(`${primaryEngine} key missing`);
       }
-    } catch (geminiError) {
-      console.warn(`⚠️ Gemini API error (${geminiError.message}). Trying OpenRouter fallback...`);
-      // Step 2: Try OpenRouter Fallback
+    } catch (primaryError) {
+      console.warn(`⚠️ Primary AI (${primaryEngine}) notice: ${primaryError.message}. Rotating to secondary AI (${secondaryEngine})...`);
+      
+      // Step 2: Try Secondary Rotated Fallback Engine
       try {
-        if (this.openRouterKey) {
+        if (secondaryEngine === 'openrouter' && this.openRouterKey) {
           outputText = await this.callOpenRouter(prompt, systemInstruction);
           provider = 'openrouter';
+        } else if (secondaryEngine === 'gemini' && this.geminiKey) {
+          outputText = await this.callGemini(prompt, systemInstruction);
+          provider = 'gemini';
         } else {
-          throw new Error('OpenRouter API key missing');
+          throw new Error(`${secondaryEngine} key missing`);
         }
-      } catch (openRouterError) {
-        console.warn(`⚠️ OpenRouter error (${openRouterError.message}). Using intelligent rule engine.`);
+      } catch (secondaryError) {
+        console.warn(`⚠️ Both Gemini & OpenRouter busy. Using intelligent rule engine.`);
         provider = 'system_fallback';
         outputText = this.generateRuleBasedFallback(task, prompt);
         if (!outputText) {
           success = false;
-          errorMsg = `Gemini: ${geminiError.message} | OpenRouter: ${openRouterError.message}`;
+          errorMsg = `Primary: ${primaryError.message} | Secondary: ${secondaryError.message}`;
         }
       }
     }
@@ -122,7 +164,7 @@ class AIService {
     try {
       await AiLog.create({
         provider,
-        model: provider === 'gemini' ? 'gemini-1.5-flash' : provider === 'openrouter' ? 'openrouter/free' : 'rule_engine',
+        model: provider === 'gemini' ? 'gemini-1.5-flash' : provider === 'openrouter' ? 'openrouter/auto' : 'rule_engine',
         task,
         lead_id,
         input_prompt: prompt.substring(0, 1000),
@@ -193,23 +235,30 @@ Return strict valid JSON ONLY in this format:
 
   // --- Task 2: Personalized Outreach Generation ---
   async generateOutreachEmail({ lead, analysis, campaign }) {
+    const senderName = process.env.SENDER_NAME || 'Abhishek Gour (Leovexa Technologies)';
+
     const prompt = `
-Generate a hyper-personalized, ultra-high-converting cold outreach email for Leovexa Technologies.
-Rules:
-1. Keep it concise (under 120 words), authentic, human, and not sounding like generic AI spam.
-2. Mention 1-2 specific observations/pain points from the analysis (${analysis?.pain_points?.join(', ') || 'No modern booking system'}).
+Generate a hyper-personalized, ultra-high-converting cold outreach email from Leovexa Technologies.
+
+STRICT WRITING RULES:
+1. Keep it concise (under 90-110 words), natural, human, and conversational.
+2. Mention 1-2 specific observations/pain points (${analysis?.pain_points?.join(', ') || 'No modern mobile booking system'}).
 3. Offer concrete value tailored to their business (${lead.business_name} in ${lead.industry}).
-4. Low friction Call To Action (e.g. "Happy to share a quick 2-minute video audit / 3 specific ideas if you're open?").
-5. Company: Leovexa Technologies (Web Development, CRM & AI Automation).
+4. Low friction Call To Action (e.g. "Happy to send over a quick 2-minute video audit with 3 specific fixes if you're open?").
+5. SIGNATURE RULE: NEVER USE PLACEHOLDERS LIKE "[Your Name]", "[Name]", "[Insert link]".
+   Always sign off with:
+   Best regards,
+   Abhishek Gour
+   Leovexa Technologies
+   https://leovexa.in
 
 Lead Data:
 - Business: ${lead.business_name}
 - Industry: ${lead.industry}
-- City: ${lead.city || 'India'}
-- Website: ${lead.website}
+- City: ${lead.city || 'local area'}
+- Website: ${lead.website || 'No website'}
 - Analysis Summary: ${analysis?.ai_summary || ''}
 - Opportunities: ${analysis?.opportunities?.join(', ') || ''}
-- Campaign Goal: ${campaign?.service_offering || 'Modern web design & appointment booking automation'}
 
 Return JSON ONLY:
 {
@@ -218,21 +267,38 @@ Return JSON ONLY:
 }
 `;
 
-    const response = await this.executeWithFallback(prompt, 'You are a master cold email copywriter. Output strict valid JSON.', 'MESSAGE_GEN', lead._id);
+    const response = await this.executeWithFallback(prompt, 'You are a master cold email copywriter. Output strict valid JSON without placeholders.', 'MESSAGE_GEN', lead._id);
+
+    let result = {
+      subject: `Quick idea for ${lead.business_name}'s website`,
+      body: `Hi ${lead.business_name} team,\n\nI was looking into your practice in ${lead.city || 'your area'} and noticed a clear opportunity to modernize your patient booking workflow.\n\nAt Leovexa Technologies, we build custom high-converting websites and automated booking funnels specifically for dental & healthcare practices.\n\nHappy to share a quick 2-minute video breakdown with 3 specific ideas if you're open?\n\nBest regards,\nAbhishek Gour\nLeovexa Technologies\nhttps://leovexa.in`
+    };
 
     try {
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.subject && parsed.body) {
+          result = parsed;
+        }
       }
     } catch (err) {
       console.error('JSON parse error in outreach email generation:', err.message);
     }
 
-    return {
-      subject: `Quick idea for ${lead.business_name}'s website`,
-      body: `Hi ${lead.business_name} team,\n\nI came across your practice while researching ${lead.industry || 'businesses'} in ${lead.city || 'your area'}.\n\nI noticed your website currently doesn't have an automated online appointment and lead capture flow, which might be costing you high-intent inquiries.\n\nAt Leovexa Technologies, we help businesses like yours build modern, high-converting websites with instant booking workflows.\n\nWould you be open to a quick 2-minute audit with a few specific ideas for ${lead.business_name}?\n\nBest regards,\nLeovexa Outreach Team\nhttps://leovexa.in`
-    };
+    // 🛡️ Post-Processing Sanitizer: Guarantee NO bracket placeholders ever slip through
+    if (result.body) {
+      result.body = result.body
+        .replace(/\[Your Name\]/gi, 'Abhishek Gour')
+        .replace(/\[Name\]/gi, 'Abhishek')
+        .replace(/\[Your Company\]/gi, 'Leovexa Technologies')
+        .replace(/\[Company Name\]/gi, 'Leovexa Technologies')
+        .replace(/\[Insert link\]/gi, 'https://leovexa.in')
+        .replace(/\[Website URL\]/gi, 'https://leovexa.in')
+        .replace(/\[Link\]/gi, 'https://leovexa.in');
+    }
+
+    return result;
   }
 
   // --- Task: Autonomous AI Lead Discovery (Foreign & Domestic) ---
@@ -438,6 +504,147 @@ Return JSON ONLY:
     };
   }
 
+  // --- Task 5: Raw Post & Project Ingestion -> Human-Tone Proposal Generator ---
+  async extractAndDraftProposals({ rawText, tone = 'human_casual', serviceOffering = 'Web App Development & AI Automation', senderName = 'Leovexa Team', customCta = 'Free 5-min video breakdown or Figma mockup' }) {
+    const prompt = `
+You are an expert sales strategist and high-converting proposal specialist.
+Your goal is to parse raw pasted text (from LinkedIn post, Upwork/Freelancer project, Facebook group, client inquiry, email, or client RFP) and generate an authentic, HUMAN-WRITTEN proposal.
+
+RAW INPUT TEXT:
+"""
+${rawText}
+"""
+
+SENDER CONFIGURATION:
+- Service Offering: ${serviceOffering}
+- Sender Name / Agency: ${senderName}
+- Desired Call To Action (CTA): ${customCta}
+- Writing Tone: ${tone} (Options: human_casual, executive_consultative, storyteller_painpoint, quick_casual)
+
+CRITICAL INSTRUCTIONS FOR PROPOSAL TONE (ANTI-AI & MAXIMUM HUMAN CONNECTION):
+1. NO AI CLICHÉS OR ROBOTIC PHRASES:
+   - STRICTLY NEVER use: "I hope this email finds you well", "I am writing to express my interest", "I am thrilled to submit", "Delve", "Leverage", "Tapestry", "Holistic", "Look no further", "Game changer".
+2. HUMAN EMOTION & EMPATHY:
+   - Speak like an experienced, thoughtful human writing a 1-on-1 message to a peer over Slack or email.
+   - Acknowledge their exact situation or pain point right away in easy, natural English.
+   - Show you actually read their requirements, not just giving a copy-paste template.
+3. CONCISE & HIGH CONVERTING:
+   - State what they need, how we would solve it simply (in 2-3 short bullet points without buzzwords), and an easy, no-pressure closing CTA.
+4. PARSING MULTIPLE POSTS:
+   - If the input contains multiple separate posts or project listings (e.g. separated by "---" or numbered), return an array with an item for each post. If it's a single post, return an array of 1 item.
+
+Return strict valid JSON ONLY in this exact structure:
+{
+  "items": [
+    {
+      "client_name": "Extracted name or 'Founder / Hiring Manager'",
+      "company_or_project": "Extracted company name or project title",
+      "contact_email": "Extracted email address if present or null",
+      "contact_phone": "Extracted phone/WhatsApp if present or null",
+      "contact_handle": "Extracted social/LinkedIn handle if present or null",
+      "source_platform": "LinkedIn | Meta / Facebook | Upwork / Freelancer | Twitter/X | Email | Other",
+      "project_summary": "1-2 sentence crisp explanation of what the client wants",
+      "key_requirements": ["Requirement 1", "Requirement 2", "Requirement 3"],
+      "tech_stack": ["Detected skill/tech 1", "Detected skill/tech 2"],
+      "budget_or_timeline": "Extracted budget/timeline if mentioned (e.g. '$1,500 - $3,000' or '2 weeks' or 'Not specified')",
+      "urgency": "High | Medium | Standard",
+      "human_score_rating": 98,
+      "proposal": {
+        "subject": "Natural, intriguing subject line (under 7 words)",
+        "full_email_body": "Full human-tone email body ready to send...",
+        "short_dm_pitch": "3-4 sentence punchy version tailored for LinkedIn InMail / WhatsApp / Telegram DM",
+        "key_deliverables": ["Deliverable 1", "Deliverable 2", "Deliverable 3"]
+      }
+    }
+  ]
+}
+`;
+
+    const response = await this.executeWithFallback(
+      prompt,
+      'You are a high-converting human proposal copywriter. Return strict valid JSON only.',
+      'PROPOSAL_GEN'
+    );
+
+    try {
+      const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.items && Array.isArray(parsed.items)) {
+          // Post-process & sanitize: Zero AI placeholder brackets like [Your Name] or [Link]
+          return parsed.items.map(item => {
+            if (item.proposal) {
+              const cleanSignature = `\n\nBest regards,\n${senderName}\nLeovexa Technologies\nhttps://leovexa.in`;
+              if (item.proposal.full_email_body) {
+                item.proposal.full_email_body = item.proposal.full_email_body
+                  .replace(/\[(?:Your Name|Name|Sender Name|Insert Name)\]/gi, senderName)
+                  .replace(/\[(?:Your Company|Company Name|Agency Name)\]/gi, 'Leovexa Technologies')
+                  .replace(/\[(?:Website|Portfolio Link|Link|Insert Link|Calendar Link)\]/gi, 'https://leovexa.in')
+                  .replace(/\[.*?\]/g, ''); // strip any remaining unresolved brackets
+                
+                // Ensure proper signature exists
+                if (!item.proposal.full_email_body.toLowerCase().includes('leovexa')) {
+                  item.proposal.full_email_body += cleanSignature;
+                }
+              }
+              if (item.proposal.short_dm_pitch) {
+                item.proposal.short_dm_pitch = item.proposal.short_dm_pitch
+                  .replace(/\[(?:Your Name|Name|Sender Name)\]/gi, senderName)
+                  .replace(/\[(?:Your Company|Company Name)\]/gi, 'Leovexa Technologies')
+                  .replace(/\[(?:Website|Link|Insert Link)\]/gi, 'https://leovexa.in')
+                  .replace(/\[.*?\]/g, '');
+              }
+            }
+            return item;
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to parse AI Proposal JSON response:', err.message);
+    }
+
+    // Fallback if parsing fails or LLM is offline
+    return this.fallbackProposalGeneration(rawText, senderName, serviceOffering);
+  }
+
+  fallbackProposalGeneration(rawText, senderName = 'Leovexa Team', serviceOffering = 'Web Development') {
+    // If rawText came from a prompt template, extract just the raw input section
+    let cleanText = rawText;
+    const promptMatch = rawText.match(/RAW INPUT TEXT:\s*"""([\s\S]*?)"""/);
+    if (promptMatch && promptMatch[1]) {
+      cleanText = promptMatch[1].trim();
+    }
+
+    // Basic regex extraction
+    const emailMatch = cleanText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = cleanText.match(/(\+?\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9})/);
+    const detectedEmail = emailMatch ? emailMatch[0] : null;
+    const detectedPhone = phoneMatch ? phoneMatch[0] : null;
+
+    return [
+      {
+        client_name: 'Hiring Lead',
+        company_or_project: 'Digital Project Inquiry',
+        contact_email: detectedEmail,
+        contact_phone: detectedPhone,
+        contact_handle: null,
+        source_platform: cleanText.toLowerCase().includes('linkedin') ? 'LinkedIn' : cleanText.toLowerCase().includes('upwork') ? 'Upwork / Freelancer' : 'Direct Inquiry',
+        project_summary: cleanText.substring(0, 150).replace(/\n/g, ' ') + '...',
+        key_requirements: ['Modern responsive design', 'Fast turnaround & clear communication', 'Scalable architecture'],
+        tech_stack: ['React', 'Node.js', 'Tailwind / Modern CSS'],
+        budget_or_timeline: 'Open / Negotiable',
+        urgency: 'Medium',
+        human_score_rating: 95,
+        proposal: {
+          subject: 'Quick thoughts on your project post',
+          full_email_body: `Hi there,\n\nI just read through your post regarding your project needs and wanted to reach out directly.\n\nFrom what you described, the main priority is getting this built cleanly without unnecessary complexity or bloated timelines.\n\nHere is how we'd approach it with you:\n• Clear milestone breakdown so you see working progress every 3-4 days.\n• Clean, high-performance code that is easy to scale later.\n• Fast, direct communication over Slack or WhatsApp so there are zero roadblocks.\n\nWould you be open to a quick 5-minute chat or looking at a short Figma draft of how this could look?\n\nBest,\n${senderName}\nhttps://leovexa.in`,
+          short_dm_pitch: `Hey! Saw your project post and would love to help. We specialize in fast, clean execution with zero fluff and weekly milestones. Happy to share a quick 2-min breakdown if you're open? - ${senderName}`,
+          key_deliverables: ['Custom modern frontend & backend', 'Fully responsive mobile-first design', 'Post-launch support & documentation']
+        }
+      }
+    ];
+  }
+
   generateRuleBasedFallback(task, prompt) {
     if (task === 'RESEARCH') {
       return JSON.stringify({
@@ -468,6 +675,11 @@ Return JSON ONLY:
         sentiment: "positive",
         summary: "Prospect expressed interest in web development & booking CRM.",
         suggested_reply: "Hi team,\n\nThanks for getting back! Here are 2 recent case studies of our work. Would you be free for a brief 10-minute discovery call this week?\n\nBest,\nLeovexa Team\nhttps://leovexa.in"
+      });
+    }
+    if (task === 'PROPOSAL_GEN') {
+      return JSON.stringify({
+        items: this.fallbackProposalGeneration(prompt)
       });
     }
     return null;
