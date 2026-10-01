@@ -11,35 +11,86 @@ dotenv.config();
 
 class EmailService {
   constructor() {
-    this.user = process.env.GMAIL_USER || '';
-    this.pass = process.env.GMAIL_APP_PASSWORD || '';
+    this.provider = process.env.SMTP_PROVIDER || (process.env.SMTP_HOST ? 'custom_smtp' : (process.env.GMAIL_USER ? 'gmail' : 'zeptomail'));
+    this.host = process.env.SMTP_HOST || 'smtp.zeptomail.in';
+    this.port = parseInt(process.env.SMTP_PORT || '587', 10);
+    this.user = process.env.SMTP_USER || process.env.GMAIL_USER || 'emailapikey';
+    this.pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '';
     this.senderName = process.env.SENDER_NAME || 'Leovexa Technologies';
+    this.senderEmail = process.env.SENDER_EMAIL || process.env.GMAIL_USER || 'noreply@leovexa.in';
+    this.zeptomailApiKey = process.env.ZEPTOMAIL_API_KEY || '';
+    this.transporter = null;
   }
 
-  updateCredentials({ user, pass, senderName }) {
+  updateCredentials({ provider, host, port, user, pass, senderName, senderEmail, zeptomailApiKey }) {
+    if (provider !== undefined) this.provider = provider;
+    if (host !== undefined) this.host = host;
+    if (port !== undefined) this.port = parseInt(port || '587', 10);
     if (user !== undefined) this.user = user;
     if (pass !== undefined) this.pass = pass;
     if (senderName !== undefined) this.senderName = senderName;
+    if (senderEmail !== undefined) this.senderEmail = senderEmail;
+    if (zeptomailApiKey !== undefined) this.zeptomailApiKey = zeptomailApiKey;
+
+    // Reset transporter cache so next send re-initializes with new credentials
+    this.transporter = null;
   }
 
   getTransporter() {
+    if (this.transporter) {
+      return this.transporter;
+    }
+
     if (!this.user || !this.pass) {
       return null;
     }
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: this.user,
-        pass: this.pass,
-      },
-    });
+
+    try {
+      if (this.provider === 'gmail') {
+        this.transporter = nodemailer.createTransport({
+          service: 'gmail',
+          pool: true,
+          maxConnections: 5,
+          maxMessages: 100,
+          rateDelta: 1000,
+          rateLimit: 5,
+          auth: {
+            user: this.user,
+            pass: this.pass,
+          },
+        });
+      } else {
+        // ZeptoMail / Zoho / Custom SMTP
+        const isSecure = this.port === 465;
+        this.transporter = nodemailer.createTransport({
+          host: this.host || 'smtp.zeptomail.in',
+          port: this.port || 587,
+          secure: isSecure,
+          pool: true,
+          maxConnections: 5,
+          maxMessages: 100,
+          auth: {
+            user: this.user,
+            pass: this.pass,
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        });
+      }
+
+      return this.transporter;
+    } catch (e) {
+      console.error('Failed to create Nodemailer transporter:', e.message);
+      return null;
+    }
   }
 
   async sendEmail({ to, subject, html, text, messageId = null, leadId = null }) {
-    // 🛡️ Pre-Flight Verification: Verify DNS MX records before attempting SMTP send
+    // 🛡️ Pre-Flight Verification: Instant cached / fast DNS check
     const mxCheck = await emailValidator.verifyEmail(to);
     if (!mxCheck.valid) {
-      console.warn(`🛑 Pre-send check blocked delivery to invalid/unreachable email: ${to} (Reason: ${mxCheck.reason})`);
+      console.warn(`🛑 Pre-send check skipped invalid address: ${to} (Reason: ${mxCheck.reason})`);
       if (messageId) {
         await Message.findByIdAndUpdate(messageId, {
           status: 'FAILED',
@@ -58,7 +109,7 @@ class EmailService {
           status: 'SENT',
           sent_at: new Date(),
           delivered_at: new Date(),
-          error_message: 'Simulated dispatch (Add Gmail App Password in Settings for live sending)'
+          error_message: 'Simulated dispatch (Configure ZeptoMail or Gmail in Settings for live delivery)'
         });
       }
       if (leadId) {
@@ -68,12 +119,16 @@ class EmailService {
     }
 
     try {
+      const fromAddress = this.senderEmail && this.senderEmail.includes('@') 
+        ? this.senderEmail 
+        : (this.user.includes('@') ? this.user : 'noreply@leovexa.in');
+
       const info = await transporter.sendMail({
-        from: `"${this.senderName}" <${this.user}>`,
+        from: `"${this.senderName}" <${fromAddress}>`,
         to,
         subject,
         text,
-        html: html || text.replace(/\n/g, '<br/>')
+        html: html || (text ? text.replace(/\n/g, '<br/>') : '')
       });
 
       if (messageId) {
@@ -89,7 +144,7 @@ class EmailService {
         await Lead.findByIdAndUpdate(leadId, { status: 'CONTACTED' });
       }
 
-      console.log(`✅ Email sent successfully to ${to} (MessageId: ${info.messageId})`);
+      console.log(`✅ Email sent successfully to ${to} (MessageId: ${info.messageId}) via ${this.provider}`);
       return { success: true, messageId: info.messageId, simulated: false };
     } catch (error) {
       console.error(`❌ Email send failed to ${to}:`, error.message);

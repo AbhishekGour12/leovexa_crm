@@ -55,13 +55,18 @@ const startServer = async () => {
         });
       }
 
-      if (configMap.gmail_user && configMap.gmail_app_password) {
-        emailService.updateCredentials({
-          user: configMap.gmail_user,
-          pass: configMap.gmail_app_password,
-          senderName: configMap.sender_name || process.env.SENDER_NAME
-        });
-      }
+      const provider = configMap.email_provider || process.env.SMTP_PROVIDER || 'zeptomail';
+      const isGmail = provider === 'gmail';
+      emailService.updateCredentials({
+        provider,
+        host: configMap.smtp_host || process.env.SMTP_HOST || 'smtp.zeptomail.in',
+        port: configMap.smtp_port || process.env.SMTP_PORT || 587,
+        user: isGmail ? (configMap.gmail_user || process.env.GMAIL_USER) : (configMap.smtp_user || process.env.SMTP_USER || 'emailapikey'),
+        pass: isGmail ? (configMap.gmail_app_password || process.env.GMAIL_APP_PASSWORD) : (configMap.smtp_pass || process.env.SMTP_PASS),
+        senderName: configMap.sender_name || process.env.SENDER_NAME || 'Leovexa Technologies',
+        senderEmail: configMap.sender_email || process.env.SENDER_EMAIL || (isGmail ? configMap.gmail_user : 'noreply@leovexa.in'),
+        zeptomailApiKey: configMap.zeptomail_api_key || process.env.ZEPTOMAIL_API_KEY
+      });
     } catch (e) {
       console.warn('Initial settings load notice:', e.message);
     }

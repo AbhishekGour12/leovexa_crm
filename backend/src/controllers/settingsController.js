@@ -22,7 +22,14 @@ export const getSettings = async (req, res) => {
         openrouter_api_key: configMap.openrouter_api_key || process.env.OPENROUTER_API_KEY || '',
         telegram_bot_token: configMap.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
         telegram_chat_id: configMap.telegram_chat_id || process.env.TELEGRAM_CHAT_ID || '',
-        gmail_user: configMap.gmail_user || process.env.GMAIL_USER || '',
+        email_provider: configMap.email_provider || process.env.SMTP_PROVIDER || 'zeptomail',
+        smtp_host: configMap.smtp_host || process.env.SMTP_HOST || 'smtp.zeptomail.in',
+        smtp_port: configMap.smtp_port || process.env.SMTP_PORT || 587,
+        smtp_user: configMap.smtp_user || process.env.SMTP_USER || 'emailapikey',
+        smtp_pass: configMap.smtp_pass || process.env.SMTP_PASS || 'PHtE6r0PQOjpiWF6oUJUtP7sF8+hPI8v+rhmeFJOs45FC/9RTU1RrNp+kjW3qhl+VfdFEvbOmYk+sb3J4L6GcGi/MWhPCGqyqK3sx/VYSPOZsbq6x00as1Qff0fUUoXnetFu0SXUs9rfNA==',
+        sender_email: configMap.sender_email || process.env.SENDER_EMAIL || 'noreply@leovexa.in',
+        zeptomail_api_key: configMap.zeptomail_api_key || process.env.ZEPTOMAIL_API_KEY || 'Zoho-enczapikey PHtE6r0PQOjpiWF6oUJUtP7sF8+hPI8v+rhmeFJOs45FC/9RTU1RrNp+kjW3qhl+VfdFEvbOmYk+sb3J4L6GcGi/MWhPCGqyqK3sx/VYSPOZsbq6x00as1Qff0fUUoXnetFu0SXUs9rfNA==',
+        gmail_user: configMap.gmail_user || process.env.GMAIL_USER || 'leovexatechnologies@gmail.com',
         gmail_app_password: configMap.gmail_app_password || process.env.GMAIL_APP_PASSWORD || '',
         sender_name: configMap.sender_name || process.env.SENDER_NAME || 'Leovexa Technologies',
         auto_approve_outreach: configMap.auto_approve_outreach !== undefined ? configMap.auto_approve_outreach : true,
@@ -42,6 +49,13 @@ export const updateSettings = async (req, res) => {
       openrouter_api_key, 
       telegram_bot_token, 
       telegram_chat_id, 
+      email_provider,
+      smtp_host,
+      smtp_port,
+      smtp_user,
+      smtp_pass,
+      sender_email,
+      zeptomail_api_key,
       gmail_user, 
       gmail_app_password, 
       sender_name,
@@ -55,6 +69,13 @@ export const updateSettings = async (req, res) => {
       { key: 'openrouter_api_key', value: openrouter_api_key },
       { key: 'telegram_bot_token', value: telegram_bot_token },
       { key: 'telegram_chat_id', value: telegram_chat_id },
+      { key: 'email_provider', value: email_provider },
+      { key: 'smtp_host', value: smtp_host },
+      { key: 'smtp_port', value: smtp_port },
+      { key: 'smtp_user', value: smtp_user },
+      { key: 'smtp_pass', value: smtp_pass },
+      { key: 'sender_email', value: sender_email },
+      { key: 'zeptomail_api_key', value: zeptomail_api_key },
       { key: 'gmail_user', value: gmail_user },
       { key: 'gmail_app_password', value: gmail_app_password },
       { key: 'sender_name', value: sender_name },
@@ -84,10 +105,16 @@ export const updateSettings = async (req, res) => {
       chatId: telegram_chat_id
     });
 
+    const isGmail = email_provider === 'gmail';
     emailService.updateCredentials({
-      user: gmail_user,
-      pass: gmail_app_password,
-      senderName: sender_name
+      provider: email_provider || 'zeptomail',
+      host: smtp_host || 'smtp.zeptomail.in',
+      port: smtp_port || 587,
+      user: isGmail ? gmail_user : (smtp_user || 'emailapikey'),
+      pass: isGmail ? gmail_app_password : smtp_pass,
+      senderName: sender_name || 'Leovexa Technologies',
+      senderEmail: sender_email || (isGmail ? gmail_user : 'noreply@leovexa.in'),
+      zeptomailApiKey: zeptomail_api_key
     });
 
     res.json({ success: true, message: 'Settings updated successfully' });
@@ -217,22 +244,45 @@ export const testTelegramBot = async (req, res) => {
 
 export const testEmailSmtp = async (req, res) => {
   try {
-    const { user, pass } = req.body;
-    const testUser = user || process.env.GMAIL_USER;
-    const testPass = pass || process.env.GMAIL_APP_PASSWORD;
+    const { provider, host, port, user, pass } = req.body;
 
-    if (!testUser || !testPass) {
-      return res.status(400).json({ success: false, error: 'Gmail user email and 16-character App Password are required' });
+    let transporter;
+    if (provider === 'gmail') {
+      const testUser = user || process.env.GMAIL_USER;
+      const testPass = pass || process.env.GMAIL_APP_PASSWORD;
+      if (!testUser || !testPass) {
+        return res.status(400).json({ success: false, error: 'Gmail user email and 16-character App Password are required' });
+      }
+      transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: testUser, pass: testPass }
+      });
+    } else {
+      // ZeptoMail or Custom SMTP
+      const testHost = host || process.env.SMTP_HOST || 'smtp.zeptomail.in';
+      const testPort = parseInt(port || process.env.SMTP_PORT || '587', 10);
+      const testUser = user || process.env.SMTP_USER || 'emailapikey';
+      const testPass = pass || process.env.SMTP_PASS;
+
+      if (!testHost || !testUser || !testPass) {
+        return res.status(400).json({ success: false, error: 'SMTP Host, Username, and Password are required' });
+      }
+
+      transporter = nodemailer.createTransport({
+        host: testHost,
+        port: testPort,
+        secure: testPort === 465,
+        auth: { user: testUser, pass: testPass },
+        tls: { rejectUnauthorized: false }
+      });
     }
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: testUser, pass: testPass }
-    });
-
     await transporter.verify();
-    res.json({ success: true, message: 'Gmail SMTP authentication verified successfully!' });
+    res.json({ 
+      success: true, 
+      message: `${provider === 'gmail' ? 'Gmail SMTP' : 'Zoho ZeptoMail SMTP'} authentication verified successfully!` 
+    });
   } catch (error) {
-    res.status(400).json({ success: false, error: `Gmail Auth Failed: ${error.message}` });
+    res.status(400).json({ success: false, error: `SMTP Auth Failed: ${error.message}` });
   }
 };

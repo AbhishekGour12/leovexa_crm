@@ -257,7 +257,16 @@ export const api = {
     const res = await fetch(`${API_BASE}/settings/test-gmail`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user, pass })
+      body: JSON.stringify({ provider: 'gmail', user, pass })
+    });
+    return res.json();
+  },
+
+  async testSmtp(payload) {
+    const res = await fetch(`${API_BASE}/settings/test-gmail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
     return res.json();
   }

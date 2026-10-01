@@ -20,6 +20,13 @@ export const SettingsView = ({ onNavigateToGuide }) => {
     openrouter_api_key: '',
     telegram_bot_token: '',
     telegram_chat_id: '',
+    email_provider: 'zeptomail',
+    smtp_host: 'smtp.zeptomail.in',
+    smtp_port: 587,
+    smtp_user: 'emailapikey',
+    smtp_pass: '',
+    sender_email: 'noreply@leovexa.in',
+    zeptomail_api_key: '',
     gmail_user: '',
     gmail_app_password: '',
     sender_name: 'Leovexa Technologies',
@@ -282,75 +289,208 @@ export const SettingsView = ({ onNavigateToGuide }) => {
           )}
         </div>
 
-        {/* Section 4: Gmail Outreach */}
-        <div className="glass-panel" style={{ padding: '22px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        {/* Section 4: Email & Outreach (Zoho ZeptoMail / Gmail / Custom SMTP) */}
+        <div className="glass-panel" style={{ padding: '22px', border: '1px solid rgba(56, 189, 248, 0.25)', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.4) 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Mail size={20} color="#f43f5e" />
+              <Mail size={22} color="#38bdf8" />
               <div>
-                <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#fff' }}>
-                  Gmail Outreach (Nodemailer SMTP)
-                </h4>
-                <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                  Sends approved pitches using your official Gmail + 16-character Google App Password.
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', margin: 0 }}>
+                    Email Outreach & SMTP Engine
+                  </h4>
+                  <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: '600', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                    High Deliverability & Pooled
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Sends AI-generated cold pitches and follow-ups with instant connection pooling and DNS caching.
                 </p>
               </div>
             </div>
 
             <button
               type="button"
-              disabled={testing.gmail || !settings.gmail_user || !settings.gmail_app_password}
-              onClick={() => runTest('gmail', () => api.testGmail(settings.gmail_user, settings.gmail_app_password))}
+              disabled={testing.smtp}
+              onClick={() => runTest('smtp', () => api.testSmtp({
+                provider: settings.email_provider || 'zeptomail',
+                host: settings.smtp_host,
+                port: settings.smtp_port,
+                user: settings.email_provider === 'gmail' ? settings.gmail_user : settings.smtp_user,
+                pass: settings.email_provider === 'gmail' ? settings.gmail_app_password : settings.smtp_pass
+              }))}
               className="btn btn-secondary"
-              style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+              style={{ fontSize: '0.78rem', padding: '7px 14px', borderColor: 'rgba(56, 189, 248, 0.4)' }}
             >
-              <Zap size={13} />
-              <span>{testing.gmail ? 'Verifying SMTP...' : 'Verify Gmail SMTP'}</span>
+              <Zap size={14} color="#38bdf8" />
+              <span>{testing.smtp ? 'Verifying SMTP...' : `Verify ${settings.email_provider === 'gmail' ? 'Gmail' : 'Zoho ZeptoMail'} SMTP`}</span>
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Sender Name</label>
-              <input
-                className="form-input"
-                value={settings.sender_name}
-                onChange={(e) => setSettings({ ...settings, sender_name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Gmail Address</label>
-              <input
-                type="email"
-                placeholder="yourname@gmail.com"
-                className="form-input"
-                value={settings.gmail_user}
-                onChange={(e) => setSettings({ ...settings, gmail_user: e.target.value })}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>16-Digit App Password</label>
-              <input
-                type="password"
-                placeholder="xxxx xxxx xxxx xxxx"
-                className="form-input"
-                value={settings.gmail_app_password}
-                onChange={(e) => setSettings({ ...settings, gmail_app_password: e.target.value })}
-              />
-            </div>
+          {/* Provider Selector Tabs */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', padding: '4px', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)', width: 'fit-content' }}>
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, email_provider: 'zeptomail', smtp_host: 'smtp.zeptomail.in', smtp_port: 587, smtp_user: 'emailapikey' })}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                fontWeight: '600',
+                border: 'none',
+                cursor: 'pointer',
+                background: (settings.email_provider === 'zeptomail' || !settings.email_provider) ? '#0284c7' : 'transparent',
+                color: (settings.email_provider === 'zeptomail' || !settings.email_provider) ? '#fff' : 'var(--text-muted)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              ⚡ Zoho ZeptoMail (Fast & Recommended)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, email_provider: 'gmail' })}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                fontWeight: '600',
+                border: 'none',
+                cursor: 'pointer',
+                background: settings.email_provider === 'gmail' ? '#e11d48' : 'transparent',
+                color: settings.email_provider === 'gmail' ? '#fff' : 'var(--text-muted)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Gmail SMTP (App Password)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, email_provider: 'custom_smtp' })}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                fontWeight: '600',
+                border: 'none',
+                cursor: 'pointer',
+                background: settings.email_provider === 'custom_smtp' ? '#6366f1' : 'transparent',
+                color: settings.email_provider === 'custom_smtp' ? '#fff' : 'var(--text-muted)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Custom SMTP / Zoho Mail
+            </button>
           </div>
 
-          {testResults.gmail && (
+          {/* Form Fields for ZeptoMail */}
+          {settings.email_provider !== 'gmail' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.6fr 1.2fr', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Sender Name</label>
+                <input
+                  className="form-input"
+                  value={settings.sender_name}
+                  onChange={(e) => setSettings({ ...settings, sender_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>From / Sender Email</label>
+                <input
+                  type="email"
+                  placeholder="noreply@leovexa.in"
+                  className="form-input"
+                  value={settings.sender_email || ''}
+                  onChange={(e) => setSettings({ ...settings, sender_email: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>SMTP Port</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={settings.smtp_port || 587}
+                  onChange={(e) => setSettings({ ...settings, smtp_port: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>SMTP Server Host</label>
+                <input
+                  className="form-input"
+                  value={settings.smtp_host || 'smtp.zeptomail.in'}
+                  onChange={(e) => setSettings({ ...settings, smtp_host: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+
+          {settings.email_provider !== 'gmail' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>SMTP Username</label>
+                <input
+                  className="form-input"
+                  value={settings.smtp_user || 'emailapikey'}
+                  onChange={(e) => setSettings({ ...settings, smtp_user: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>ZeptoMail Password / Send Mail Token</label>
+                <input
+                  type="password"
+                  placeholder="Paste Zoho ZeptoMail password token..."
+                  className="form-input"
+                  value={settings.smtp_pass || ''}
+                  onChange={(e) => setSettings({ ...settings, smtp_pass: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Form Fields for Gmail */}
+          {settings.email_provider === 'gmail' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Sender Name</label>
+                <input
+                  className="form-input"
+                  value={settings.sender_name}
+                  onChange={(e) => setSettings({ ...settings, sender_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Gmail Address</label>
+                <input
+                  type="email"
+                  placeholder="yourname@gmail.com"
+                  className="form-input"
+                  value={settings.gmail_user || ''}
+                  onChange={(e) => setSettings({ ...settings, gmail_user: e.target.value })}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>16-Digit App Password</label>
+                <input
+                  type="password"
+                  placeholder="xxxx xxxx xxxx xxxx"
+                  className="form-input"
+                  value={settings.gmail_app_password || ''}
+                  onChange={(e) => setSettings({ ...settings, gmail_app_password: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+
+          {testResults.smtp && (
             <div style={{
-              marginTop: '10px',
+              marginTop: '12px',
               padding: '10px 12px',
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.78rem',
-              background: testResults.gmail.success ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
-              color: testResults.gmail.success ? '#34d399' : '#fb7185',
-              border: `1px solid ${testResults.gmail.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`
+              background: testResults.smtp.success ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+              color: testResults.smtp.success ? '#34d399' : '#fb7185',
+              border: `1px solid ${testResults.smtp.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`
             }}>
-              {testResults.gmail.success ? '✅ ' : '❌ '} {testResults.gmail.message}
+              {testResults.smtp.success ? '✅ ' : '❌ '} {testResults.smtp.message}
             </div>
           )}
         </div>

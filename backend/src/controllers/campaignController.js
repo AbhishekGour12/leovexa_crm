@@ -7,14 +7,17 @@ export const getCampaigns = async (req, res) => {
   try {
     const campaigns = await Campaign.find().sort({ created_at: -1 });
     
-    // Refresh live stats
-    for (const c of campaigns) {
-      const total = await Lead.countDocuments({ campaign_id: c._id });
-      const qualified = await Lead.countDocuments({ campaign_id: c._id, status: { $in: ['QUALIFIED', 'APPROVED', 'CONTACTED', 'REPLIED', 'MEETING', 'WON'] } });
-      const pending = await Message.countDocuments({ campaign_id: c._id, status: 'PENDING_APPROVAL' });
-      const contacted = await Lead.countDocuments({ campaign_id: c._id, status: { $in: ['CONTACTED', 'REPLIED', 'MEETING', 'WON'] } });
-      const replies = await Lead.countDocuments({ campaign_id: c._id, status: { $in: ['REPLIED', 'MEETING', 'WON'] } });
-      const won = await Lead.countDocuments({ campaign_id: c._id, status: 'WON' });
+    // Refresh live stats in parallel
+    await Promise.all(campaigns.map(async (c) => {
+      const [total, qualified, pending, contacted, replies, won, meetings] = await Promise.all([
+        Lead.countDocuments({ campaign_id: c._id }),
+        Lead.countDocuments({ campaign_id: c._id, status: { $in: ['QUALIFIED', 'APPROVED', 'CONTACTED', 'REPLIED', 'MEETING', 'WON'] } }),
+        Message.countDocuments({ campaign_id: c._id, status: 'PENDING_APPROVAL' }),
+        Lead.countDocuments({ campaign_id: c._id, status: { $in: ['CONTACTED', 'REPLIED', 'MEETING', 'WON'] } }),
+        Lead.countDocuments({ campaign_id: c._id, status: { $in: ['REPLIED', 'MEETING', 'WON'] } }),
+        Lead.countDocuments({ campaign_id: c._id, status: 'WON' }),
+        Lead.countDocuments({ campaign_id: c._id, status: 'MEETING' })
+      ]);
 
       c.stats = {
         total_leads: total,
@@ -23,11 +26,10 @@ export const getCampaigns = async (req, res) => {
         contacted,
         replies,
         interested: replies,
-        meetings: await Lead.countDocuments({ campaign_id: c._id, status: 'MEETING' }),
+        meetings,
         won
       };
-      await c.save();
-    }
+    }));
 
     res.json({ success: true, data: campaigns });
   } catch (error) {
