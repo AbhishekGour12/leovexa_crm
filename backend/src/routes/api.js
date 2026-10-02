@@ -104,4 +104,46 @@ router.post('/settings/test-openrouter', testOpenRouterKey);
 router.post('/settings/test-telegram', testTelegramBot);
 router.post('/settings/test-gmail', testEmailSmtp);
 
+// 24/7 Autonomous Background Cron & Keep-Alive Endpoints (for cron-job.org / Vercel Cron / Render Keepalive)
+router.get('/cron/keepalive', (req, res) => {
+  res.json({
+    status: 'online',
+    message: 'Leovexa CRM Server is awake and active',
+    timestamp: new Date().toISOString()
+  });
+});
+
+router.all('/cron/daily-leads', async (req, res) => {
+  try {
+    const { queueService } = await import('../services/queue.service.js');
+    const count = await queueService.runDaily40LeadsCycle(true);
+    const sentCount = await queueService.processApprovedOutreachQueue(40);
+    res.json({
+      success: true,
+      message: `✅ Autonomous Daily Cycle Executed: ${count} verified leads generated & ${sentCount} outreach emails dispatched!`,
+      leads_created: count,
+      emails_dispatched: sentCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.all('/cron/process-queue', async (req, res) => {
+  try {
+    const { queueService } = await import('../services/queue.service.js');
+    const sentCount = await queueService.processApprovedOutreachQueue(20);
+    res.json({
+      success: true,
+      message: `Queue processed: ${sentCount} messages sent`,
+      sentCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;
+

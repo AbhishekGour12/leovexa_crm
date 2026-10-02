@@ -80,28 +80,23 @@ class QueueService {
     }
   }
 
-  // Daily Scheduled 50 Lead Ingestion & Pitch Generation (Runs every morning 09:00 AM)
+  // Daily Scheduled 40 Lead Ingestion & Pitch Generation (Autonomous Background Cycle)
   async checkDailyScheduledDiscovery() {
     try {
       const now = new Date();
       const todayStr = now.toISOString().split('T')[0];
 
-      // Check if already ran today
-      if (this.lastDailyRunDate === todayStr) return;
-
-      // 🛡️ Priority Guard: If manual leads exist, pause automated AI extraction
-      const manualCount = await this.getUnprocessedManualCount();
-      if (manualCount > 0) {
-        console.log(`⏸️ Autonomous AI Lead Discovery PAUSED: Prioritizing ${manualCount} unprocessed manual leads in queue.`);
-        return;
+      // Check DB for persistent daily run status
+      const lastRunSetting = await Setting.findOne({ key: 'last_daily_run_date' });
+      if (lastRunSetting && lastRunSetting.value === todayStr) {
+        return; // Already executed today's 40-lead quota
       }
 
       const currentHour = now.getHours();
-      // Runs automatically between 09:00 AM and 10:00 AM (or on initial launch)
-      if (currentHour >= 9) {
-        this.lastDailyRunDate = todayStr;
-        console.log(`🤖 Starting Daily Autonomous 50 Real Lead Discovery for ${todayStr}...`);
-        await this.runDaily50LeadsCycle();
+      // Runs automatically when server is awake between 08:00 AM - 11:00 PM or whenever triggered
+      if (currentHour >= 8 || !lastRunSetting) {
+        console.log(`🤖 Triggering Daily Autonomous 40 Real Lead Discovery for ${todayStr}...`);
+        await this.runDaily40LeadsCycle(false);
       }
     } catch (e) {
       console.warn('Daily scheduled discovery check notice:', e.message);
@@ -112,15 +107,23 @@ class QueueService {
   async runDaily40LeadsCycle(force = false) {
     let createdCount = 0;
     const targetGoal = 40;
+    const todayStr = new Date().toISOString().split('T')[0];
+
     try {
-      // Priority Guard (Only check if not forced manually)
       if (!force) {
-        const manualCount = await this.getUnprocessedManualCount();
-        if (manualCount > 0) {
-          console.log(`⏸️ Skipping AI Lead Cycle: ${manualCount} Manual Leads are currently being processed.`);
+        const lastRunSetting = await Setting.findOne({ key: 'last_daily_run_date' });
+        if (lastRunSetting && lastRunSetting.value === todayStr) {
+          console.log(`ℹ️ Daily lead quota already fulfilled for ${todayStr}.`);
           return 0;
         }
       }
+
+      // Mark running in DB immediately to prevent concurrent duplicates
+      await Setting.findOneAndUpdate(
+        { key: 'last_daily_run_date' },
+        { value: todayStr, description: `Executed on ${new Date().toISOString()}` },
+        { upsert: true }
+      );
 
       const targetCountries = ['India', 'USA', 'UK', 'UAE', 'Canada', 'Australia'];
       const targetNiches = [
@@ -277,6 +280,12 @@ class QueueService {
       }
 
       console.log(`✅ Daily Autonomous 40 Real Lead Discovery cycle completed! (${createdCount} new verified leads captured)`);
+
+      // Trigger automatic background email dispatch immediately for newly generated approved leads
+      setTimeout(() => {
+        this.processApprovedOutreachQueue(20).catch(e => console.warn('Post-discovery email queue error:', e.message));
+      }, 2000);
+
       return createdCount;
     } catch (err) {
       console.error('Error running daily lead cycle:', err.message);
@@ -290,14 +299,15 @@ class QueueService {
   }
 
   // Send approved emails via email service (spaced out safely, prioritizing manual leads)
-  async processApprovedOutreachQueue() {
+  async processApprovedOutreachQueue(batchLimit = 10) {
     try {
       // Find approved messages, prioritizing manual imports first
       const approvedMessages = await Message.find({ status: 'APPROVED' })
         .populate('lead_id')
         .sort({ approval_source: -1, created_at: 1 })
-        .limit(3);
+        .limit(batchLimit);
 
+      let sentCount = 0;
       for (const msg of approvedMessages) {
         if (!msg.lead_id || !msg.lead_id.email) {
           msg.status = 'FAILED';
@@ -317,12 +327,18 @@ class QueueService {
             messageId: msg._id,
             leadId: msg.lead_id._id
           });
+          sentCount++;
+
+          // Small 400ms pause to ensure safe email provider rate limits
+          await new Promise(res => setTimeout(res, 400));
         } catch (err) {
           console.error(`Error sending approved message ${msg._id}:`, err.message);
         }
       }
+      return sentCount;
     } catch (e) {
       console.warn('Queue processing error:', e.message);
+      return 0;
     }
   }
 
