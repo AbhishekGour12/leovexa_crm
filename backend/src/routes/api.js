@@ -115,18 +115,28 @@ router.get('/cron/keepalive', (req, res) => {
 
 router.all('/cron/daily-leads', async (req, res) => {
   try {
-    const { queueService } = await import('../services/queue.service.js');
-    const count = await queueService.runDaily40LeadsCycle(true);
-    const sentCount = await queueService.processApprovedOutreachQueue(40);
+    // ⚡ Fast Response to cron-job.org (completes in <100ms so it NEVER hits the 30s timeout)
     res.json({
       success: true,
-      message: `✅ Autonomous Daily Cycle Executed: ${count} verified leads generated & ${sentCount} outreach emails dispatched!`,
-      leads_created: count,
-      emails_dispatched: sentCount,
+      status: 'PROCESSING',
+      message: '🚀 Autonomous Daily 40 Leads cycle triggered and executing in background!',
       timestamp: new Date().toISOString()
     });
+
+    // Execute the full cycle asynchronously in the background
+    const { queueService } = await import('../services/queue.service.js');
+    queueService.runDaily40LeadsCycle(true)
+      .then(async (count) => {
+        console.log(`✅ [CRON TRIGGER] Generated ${count} leads.`);
+        await queueService.processApprovedOutreachQueue(40);
+      })
+      .catch((err) => {
+        console.error('❌ [CRON TRIGGER ERROR]:', err.message);
+      });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
 });
 
