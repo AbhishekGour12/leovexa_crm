@@ -32,7 +32,9 @@ import {
   simulateInboundReply,
   getConversations,
   getFollowupSequences,
-  triggerManualFollowup
+  triggerManualFollowup,
+  resendMessage,
+  deleteMessage
 } from '../controllers/messageController.js';
 import {
   getDeals,
@@ -49,6 +51,21 @@ import {
   testTelegramBot,
   testEmailSmtp
 } from '../controllers/settingsController.js';
+import {
+  getGreenhouseDashboard,
+  getApplications,
+  getApplicationById,
+  updateApplicationStatus,
+  deleteApplication,
+  exploreBoardJobs,
+  applySingleJob,
+  triggerDailyCycle,
+  getCandidateProfile,
+  updateCandidateProfile,
+  uploadResume,
+  downloadResume,
+  sendOutreachEmail
+} from '../controllers/greenhouseController.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -87,6 +104,8 @@ router.post('/messages/trigger-followup', triggerManualFollowup);
 router.post('/messages/:id/approve', approveMessage);
 router.post('/messages/:id/reject', rejectMessage);
 router.post('/messages/:id/regenerate', regeneratePitch);
+router.post('/messages/:id/resend', resendMessage);
+router.delete('/messages/:id', deleteMessage);
 router.post('/messages/simulate-reply', simulateInboundReply);
 router.get('/conversations', getConversations);
 
@@ -103,6 +122,21 @@ router.post('/settings/test-gemini', testGeminiKey);
 router.post('/settings/test-openrouter', testOpenRouterKey);
 router.post('/settings/test-telegram', testTelegramBot);
 router.post('/settings/test-gmail', testEmailSmtp);
+
+// Greenhouse Job Board API & Auto-Applier Layer
+router.get('/greenhouse/dashboard', getGreenhouseDashboard);
+router.get('/greenhouse/applications', getApplications);
+router.get('/greenhouse/applications/:id', getApplicationById);
+router.put('/greenhouse/applications/:id/status', updateApplicationStatus);
+router.delete('/greenhouse/applications/:id', deleteApplication);
+router.get('/greenhouse/explore', exploreBoardJobs);
+router.post('/greenhouse/apply-single', applySingleJob);
+router.post('/greenhouse/trigger-daily-cycle', triggerDailyCycle);
+router.get('/greenhouse/profile', getCandidateProfile);
+router.post('/greenhouse/profile', updateCandidateProfile);
+router.post('/greenhouse/upload-resume', upload.single('resume'), uploadResume);
+router.get('/greenhouse/download-resume', downloadResume);
+router.post('/greenhouse/send-outreach', sendOutreachEmail);
 
 // 24/7 Autonomous Background Cron & Keep-Alive Endpoints (for cron-job.org / Vercel Cron / Render Keepalive)
 router.get('/cron/keepalive', (req, res) => {

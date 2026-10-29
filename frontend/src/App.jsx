@@ -10,6 +10,8 @@ import { DealsKanbanView } from './pages/DealsKanbanView';
 import { SettingsView } from './pages/SettingsView';
 import { ApiGuideView } from './pages/ApiGuideView';
 import { AiPostIngestorView } from './pages/AiPostIngestorView';
+import { EmailLogsView } from './pages/EmailLogsView';
+import { GreenhouseJobsView } from './pages/GreenhouseJobsView';
 import { LeadDrawer } from './components/LeadDrawer';
 import { ApprovalModal } from './components/ApprovalModal';
 import { NewLeadModal } from './components/NewLeadModal';
@@ -42,7 +44,7 @@ export function App() {
     try {
       const [dashRes, leadsRes, campRes, msgRes, convRes, dealsRes] = await Promise.all([
         api.getDashboard(),
-        api.getLeads(),
+        api.getLeads({ limit: 1000 }),
         api.getCampaigns(),
         api.getPendingApprovals(),
         api.getConversations(),
@@ -224,9 +226,11 @@ export function App() {
   // Header titles
   const titles = {
     dashboard: { title: 'AI Outreach Command Center', sub: 'Autonomous pipeline metrics & conversion telemetry' },
+    greenhouse: { title: 'Greenhouse Job Board AI & Auto-Applier', sub: 'Autonomous daily 20 jobs discovery, resume auto-dispatch & application pipeline' },
     post_ingestor: { title: 'AI Lead & Proposal Ingestor', sub: 'Instant parsing for LinkedIn, Meta, Upwork posts with 100% human-toned emotional proposals' },
     campaigns: { title: 'Campaigns', sub: 'Targeted niche sequences & pacing settings' },
     leads: { title: 'Leads & Discovery Layer', sub: 'AI audit observations, opportunity scoring & lead directory' },
+    email_logs: { title: 'Email Outbox & Delivery Logs', sub: 'Real-time telemetry, sent & failed email history with date & status filters' },
     approvals: { title: 'Approval Queue', sub: 'Human-in-the-loop review safety gate for cold pitches' },
     inbox: { title: 'Unified Inbox & Reply AI', sub: 'Inbound intent detection and 1-click follow-up answers' },
     pipeline: { title: 'Deals Pipeline (Kanban)', sub: 'Stage progression & revenue forecast' },
@@ -273,6 +277,10 @@ export function App() {
             />
           )}
 
+          {activeTab === 'greenhouse' && (
+            <GreenhouseJobsView />
+          )}
+
           {activeTab === 'post_ingestor' && (
             <AiPostIngestorView
               onLeadAdded={fetchAllData}
@@ -296,6 +304,12 @@ export function App() {
               onSeedDemo={handleSeedDemo}
               onAiDiscover={handleAiDiscover}
               onTriggerDailyLeads={handleTriggerDailyLeads}
+            />
+          )}
+
+          {activeTab === 'email_logs' && (
+            <EmailLogsView
+              onSelectLead={handleSelectLead}
             />
           )}
 

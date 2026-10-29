@@ -4,8 +4,10 @@ const API_BASE = import.meta.env.VITE_API_URL
 
 export const api = {
   // Dashboard & Analytics
-  async getDashboard() {
-    const res = await fetch(`${API_BASE}/analytics/dashboard`);
+  async getDashboard(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const url = query ? `${API_BASE}/analytics/dashboard?${query}` : `${API_BASE}/analytics/dashboard`;
+    const res = await fetch(url);
     return res.json();
   },
 
@@ -119,7 +121,27 @@ export const api = {
     return res.json();
   },
 
-  // Messages & Approvals
+  // Messages & Outbox Logs
+  async getMessages(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/messages?${query}`);
+    return res.json();
+  },
+
+  async resendMessage(id) {
+    const res = await fetch(`${API_BASE}/messages/${id}/resend`, {
+      method: 'POST'
+    });
+    return res.json();
+  },
+
+  async deleteMessage(id) {
+    const res = await fetch(`${API_BASE}/messages/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
   async getPendingApprovals() {
     const res = await fetch(`${API_BASE}/messages/pending-approvals`);
     return res.json();
@@ -269,5 +291,98 @@ export const api = {
       body: JSON.stringify(payload)
     });
     return res.json();
+  },
+
+  // Greenhouse Job Board API & Auto-Applier
+  async getGreenhouseDashboard() {
+    const res = await fetch(`${API_BASE}/greenhouse/dashboard`);
+    return res.json();
+  },
+
+  async getGreenhouseApplications(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/greenhouse/applications?${query}`);
+    return res.json();
+  },
+
+  async getGreenhouseApplicationById(id) {
+    const res = await fetch(`${API_BASE}/greenhouse/applications/${id}`);
+    return res.json();
+  },
+
+  async updateGreenhouseStatus(id, data) {
+    const res = await fetch(`${API_BASE}/greenhouse/applications/${id}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  async deleteGreenhouseApplication(id) {
+    const res = await fetch(`${API_BASE}/greenhouse/applications/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async exploreGreenhouseJobs(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/greenhouse/explore?${query}`);
+    return res.json();
+  },
+
+  async applySingleGreenhouseJob(data) {
+    const res = await fetch(`${API_BASE}/greenhouse/apply-single`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  async triggerDailyGreenhouseCycle(data = {}) {
+    const res = await fetch(`${API_BASE}/greenhouse/trigger-daily-cycle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  async getGreenhouseProfile() {
+    const res = await fetch(`${API_BASE}/greenhouse/profile`);
+    return res.json();
+  },
+
+  async updateGreenhouseProfile(data) {
+    const res = await fetch(`${API_BASE}/greenhouse/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  async uploadResume(formData) {
+    const res = await fetch(`${API_BASE}/greenhouse/upload-resume`, {
+      method: 'POST',
+      body: formData
+    });
+    return res.json();
+  },
+
+  getResumeDownloadUrl() {
+    return `${API_BASE}/greenhouse/download-resume`;
+  },
+
+  async sendGreenhouseOutreach(data) {
+    const res = await fetch(`${API_BASE}/greenhouse/send-outreach`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
   }
 };
+

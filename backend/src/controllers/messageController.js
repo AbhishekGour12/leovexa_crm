@@ -6,16 +6,88 @@ import { emailService } from '../services/email.service.js';
 
 export const getMessages = async (req, res) => {
   try {
-    const { status, lead_id } = req.query;
+    const { status, lead_id, direction, type, search, startDate, endDate, errorOnly } = req.query;
     const query = {};
-    if (status) query.status = status;
+    if (status && status !== 'ALL') query.status = status;
+    if (direction) query.direction = direction;
+    if (type && type !== 'ALL') query.type = type;
     if (lead_id) query.lead_id = lead_id;
+    if (errorOnly === 'true') query.status = 'FAILED';
 
-    const messages = await Message.find(query)
+    if (startDate || endDate) {
+      query.created_at = {};
+      if (startDate) query.created_at.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.created_at.$lte = end;
+      }
+    }
+
+    let messages = await Message.find(query)
       .populate('lead_id')
-      .sort({ created_at: -1 });
+      .populate('campaign_id')
+      .sort({ created_at: -1 })
+      .limit(500);
+
+    if (search && search.trim()) {
+      const s = search.toLowerCase();
+      messages = messages.filter(m => 
+        (m.subject || '').toLowerCase().includes(s) ||
+        (m.content || '').toLowerCase().includes(s) ||
+        (m.error_message || '').toLowerCase().includes(s) ||
+        (m.lead_id?.business_name || '').toLowerCase().includes(s) ||
+        (m.lead_id?.email || '').toLowerCase().includes(s)
+      );
+    }
 
     res.json({ success: true, count: messages.length, data: messages });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const resendMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const message = await Message.findById(id).populate('lead_id');
+    if (!message) return res.status(404).json({ success: false, error: 'Message not found' });
+    if (!message.lead_id || !message.lead_id.email) {
+      return res.status(400).json({ success: false, error: 'Lead has no valid email address' });
+    }
+
+    message.status = 'SENDING';
+    await message.save();
+
+    const result = await emailService.sendEmail({
+      to: message.lead_id.email,
+      subject: message.subject,
+      text: message.content,
+      messageId: message._id,
+      leadId: message.lead_id._id
+    });
+
+    const updated = await Message.findById(id).populate('lead_id');
+    res.json({
+      success: true,
+      message: `Email re-dispatched to ${message.lead_id.email} successfully!`,
+      data: updated,
+      result
+    });
+  } catch (error) {
+    await Message.findByIdAndUpdate(req.params.id, {
+      status: 'FAILED',
+      error_message: error.message
+    });
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Message.findByIdAndDelete(id);
+    res.json({ success: true, message: 'Email log deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

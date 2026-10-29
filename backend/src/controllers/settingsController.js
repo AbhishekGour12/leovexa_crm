@@ -27,7 +27,7 @@ export const getSettings = async (req, res) => {
         smtp_port: configMap.smtp_port || process.env.SMTP_PORT || 587,
         smtp_user: configMap.smtp_user || process.env.SMTP_USER || 'emailapikey',
         smtp_pass: configMap.smtp_pass || process.env.SMTP_PASS || 'PHtE6r0PQOjpiWF6oUJUtP7sF8+hPI8v+rhmeFJOs45FC/9RTU1RrNp+kjW3qhl+VfdFEvbOmYk+sb3J4L6GcGi/MWhPCGqyqK3sx/VYSPOZsbq6x00as1Qff0fUUoXnetFu0SXUs9rfNA==',
-        sender_email: configMap.sender_email || process.env.SENDER_EMAIL || 'noreply@leovexa.in',
+        sender_email: configMap.sender_email || process.env.SENDER_EMAIL || 'abhishek@leovexa.in',
         zeptomail_api_key: configMap.zeptomail_api_key || process.env.ZEPTOMAIL_API_KEY || 'Zoho-enczapikey PHtE6r0PQOjpiWF6oUJUtP7sF8+hPI8v+rhmeFJOs45FC/9RTU1RrNp+kjW3qhl+VfdFEvbOmYk+sb3J4L6GcGi/MWhPCGqyqK3sx/VYSPOZsbq6x00as1Qff0fUUoXnetFu0SXUs9rfNA==',
         gmail_user: configMap.gmail_user || process.env.GMAIL_USER || 'leovexatechnologies@gmail.com',
         gmail_app_password: configMap.gmail_app_password || process.env.GMAIL_APP_PASSWORD || '',
@@ -130,7 +130,7 @@ export const testGeminiKey = async (req, res) => {
     if (!testKey) return res.status(400).json({ success: false, error: 'Gemini API Key is required' });
 
     const genAI = new GoogleGenerativeAI(testKey);
-    const candidateModels = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    const candidateModels = ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
     let text = '';
     let lastErr = null;
 
@@ -158,7 +158,7 @@ export const testGeminiKey = async (req, res) => {
 
     if (!text && lastErr) throw lastErr;
 
-    res.json({ success: true, message: 'Gemini API (1.5 Flash) is active and functioning perfectly!', response: (text || 'Gemini Connected OK').trim() });
+    res.json({ success: true, message: 'Gemini API is active and functioning perfectly!', response: (text || 'Gemini Connected OK').trim() });
   } catch (error) {
     res.status(400).json({ success: false, error: `Gemini Test Failed: ${error.message}` });
   }
@@ -170,7 +170,7 @@ export const testOpenRouterKey = async (req, res) => {
     const testKey = (key || process.env.OPENROUTER_API_KEY || '').trim();
     if (!testKey) return res.status(400).json({ success: false, error: 'OpenRouter API Key is required' });
 
-    const candidateModels = ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct', 'mistralai/mistral-7b-instruct:free'];
+    const candidateModels = ['openrouter/free', 'openrouter/auto', 'meta-llama/llama-3.3-70b-instruct'];
     let responseText = '';
     let lastErr = null;
 

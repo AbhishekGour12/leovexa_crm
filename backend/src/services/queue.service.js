@@ -8,6 +8,7 @@ import { emailService } from './email.service.js';
 import { aiService } from './ai.service.js';
 import { realLeadScraper } from './realLeadScraper.service.js';
 import { emailValidator } from './emailValidator.service.js';
+import { greenhouseService } from './greenhouse.service.js';
 
 class QueueService {
   constructor() {
@@ -29,6 +30,7 @@ class QueueService {
       }
 
       await this.checkDailyScheduledDiscovery();
+      await this.checkDailyGreenhouseDiscovery();
       await this.processAutoApprovals();
       await this.processApprovedOutreachQueue();
       await this.checkScheduledFollowUps();
@@ -100,6 +102,35 @@ class QueueService {
       }
     } catch (e) {
       console.warn('Daily scheduled discovery check notice:', e.message);
+    }
+  }
+
+  // Daily Scheduled 20 Greenhouse Jobs Discovery & Auto-Applier Cycle
+  async checkDailyGreenhouseDiscovery() {
+    try {
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+
+      // Check DB for persistent daily run status
+      const lastRunSetting = await Setting.findOne({ key: 'last_daily_greenhouse_run' });
+      if (lastRunSetting && lastRunSetting.value === todayStr) {
+        return; // Already executed today's 20-job Greenhouse quota
+      }
+
+      // Check candidate profile
+      const profile = await greenhouseService.getCandidateProfile();
+      if (profile.auto_apply_enabled === false) {
+        return;
+      }
+
+      const currentHour = now.getHours();
+      // Runs during active day hours or on first launch
+      if (currentHour >= 8 || !lastRunSetting) {
+        console.log(`💼 Triggering Daily Autonomous 20 Greenhouse Job Auto-Applier for ${todayStr}...`);
+        await greenhouseService.runDaily20JobCycle({ targetCount: profile.daily_quota || 20, force: false });
+      }
+    } catch (e) {
+      console.warn('Daily Greenhouse job discovery notice:', e.message);
     }
   }
 

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
+import mongoose from 'mongoose';
 import { AiLog } from '../models/AiLog.js';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -16,12 +17,12 @@ class AIService {
     if (openRouterKey !== undefined) this.openRouterKey = openRouterKey;
   }
 
-  async callGemini(prompt, systemInstruction = '', modelName = 'gemini-1.5-flash') {
+  async callGemini(prompt, systemInstruction = '', modelName = 'gemini-3.5-flash') {
     if (!this.geminiKey) {
       throw new Error('GEMINI_API_KEY not configured');
     }
     const genAI = new GoogleGenerativeAI(this.geminiKey);
-    const candidateModels = [modelName, 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    const candidateModels = [modelName, 'gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
     let lastError = null;
 
     for (const m of candidateModels) {
@@ -50,7 +51,7 @@ class AIService {
     throw lastError || new Error('Gemini API call failed');
   }
 
-  async callOpenRouter(prompt, systemInstruction = '', model = 'openrouter/auto') {
+  async callOpenRouter(prompt, systemInstruction = '', model = 'openrouter/free') {
     if (!this.openRouterKey) {
       throw new Error('OPENROUTER_API_KEY not configured');
     }
@@ -61,7 +62,7 @@ class AIService {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const candidateModels = [model, 'openrouter/auto', 'google/gemini-2.0-flash-exp:free', 'meta-llama/llama-3.3-70b-instruct'];
+    const candidateModels = [model, 'openrouter/free', 'openrouter/auto', 'meta-llama/llama-3.3-70b-instruct'];
     let lastError = null;
 
     for (const m of candidateModels) {
@@ -79,7 +80,7 @@ class AIService {
               'X-Title': 'Leovexa Outreach CRM',
               'Content-Type': 'application/json',
             },
-            timeout: 25000,
+            timeout: 10000,
           }
         );
 
@@ -95,19 +96,13 @@ class AIService {
     throw lastError || new Error('OpenRouter API call failed');
   }
 
-  // Smart Rotation: Alternates between Gemini and OpenRouter day-by-day and request-by-request
+  // Fast AI Provider Selection: Gemini 3.7 Flash is ultra-fast (<1s), falls back to OpenRouter seamlessly
   getPreferredProvider() {
     this.callCounter++;
-    // Check day of year or rotation counter for balanced dual-engine load
-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
-    const dayCycle = (dayOfYear + this.callCounter) % 2;
-
-    if (dayCycle === 0 && this.geminiKey) {
+    if (this.geminiKey) {
       return 'gemini';
     } else if (this.openRouterKey) {
       return 'openrouter';
-    } else if (this.geminiKey) {
-      return 'gemini';
     }
     return 'system_fallback';
   }
@@ -160,19 +155,21 @@ class AIService {
 
     const duration_ms = Date.now() - startTime;
 
-    // Log AI call
+    // Log AI call (if DB connected)
     try {
-      await AiLog.create({
-        provider,
-        model: provider === 'gemini' ? 'gemini-1.5-flash' : provider === 'openrouter' ? 'openrouter/auto' : 'rule_engine',
-        task,
-        lead_id,
-        input_prompt: prompt.substring(0, 1000),
-        output_text: (outputText || '').substring(0, 2000),
-        success,
-        error: errorMsg,
-        duration_ms,
-      });
+      if (mongoose.connection.readyState === 1) {
+        await AiLog.create({
+          provider,
+          model: provider === 'gemini' ? 'gemini-3.7-flash' : provider === 'openrouter' ? 'openrouter/free' : 'rule_engine',
+          task,
+          lead_id,
+          input_prompt: prompt.substring(0, 1000),
+          output_text: (outputText || '').substring(0, 2000),
+          success,
+          error: errorMsg,
+          duration_ms,
+        });
+      }
     } catch (e) {
       // ignore logging db error
     }

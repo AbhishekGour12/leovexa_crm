@@ -13,26 +13,110 @@ import { Readable } from 'stream';
 
 export const getLeads = async (req, res) => {
   try {
-    const { status, industry, minScore, search, page = 1, limit = 50 } = req.query;
+    const {
+      status,
+      industry,
+      minScore,
+      scoreFilter,
+      search,
+      dateFilter,
+      startDate,
+      endDate,
+      source,
+      location,
+      hasWebsite,
+      sortBy = 'NEWEST',
+      page = 1,
+      limit = 1000
+    } = req.query;
+
     const query = {};
 
+    // 1. Status Filter
     if (status && status !== 'ALL') query.status = status;
-    if (industry && industry !== 'ALL') query.industry = new RegExp(industry, 'i');
-    if (minScore) query.lead_score = { $gte: Number(minScore) };
-    if (search) {
+
+    // 2. Industry Filter
+    if (industry && industry !== 'ALL') query.industry = new RegExp(`^${industry.trim()}$`, 'i');
+
+    // 3. Location Filter
+    if (location && location !== 'ALL') {
       query.$or = [
-        { business_name: new RegExp(search, 'i') },
-        { email: new RegExp(search, 'i') },
-        { city: new RegExp(search, 'i') },
-        { industry: new RegExp(search, 'i') }
+        { city: new RegExp(location, 'i') },
+        { state: new RegExp(location, 'i') },
+        { country: new RegExp(location, 'i') }
       ];
     }
 
+    // 4. Source Filter
+    if (source && source !== 'ALL') {
+      query.source = new RegExp(source, 'i');
+    }
+
+    // 5. Score / Qualification Filter
+    if (scoreFilter === 'HOT_80') query.lead_score = { $gte: 80 };
+    else if (scoreFilter === 'QUALIFIED_60') query.lead_score = { $gte: 60 };
+    else if (scoreFilter === 'MODERATE_40') query.lead_score = { $gte: 40, $lt: 60 };
+    else if (scoreFilter === 'LOW') query.lead_score = { $lt: 40 };
+    else if (minScore) query.lead_score = { $gte: Number(minScore) };
+
+    // 6. Website Filter
+    if (hasWebsite === 'NO_WEBSITE' || hasWebsite === 'false') {
+      query.$or = [{ website: { $exists: false } }, { website: '' }, { website: null }];
+    } else if (hasWebsite === 'HAS_WEBSITE' || hasWebsite === 'true') {
+      query.website = { $exists: true, $nin: ['', null] };
+    }
+
+    // 7. Date Filtering
+    const now = new Date();
+    if (dateFilter === 'TODAY') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      query.created_at = { $gte: todayStart };
+    } else if (dateFilter === 'YESTERDAY') {
+      const yestStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+      const yestEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+      query.created_at = { $gte: yestStart, $lte: yestEnd };
+    } else if (dateFilter === '7DAYS') {
+      const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      query.created_at = { $gte: d7 };
+    } else if (dateFilter === '30DAYS') {
+      const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      query.created_at = { $gte: d30 };
+    } else if (dateFilter === 'CUSTOM' || startDate || endDate) {
+      query.created_at = {};
+      if (startDate) query.created_at.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.created_at.$lte = end;
+      }
+    }
+
+    // 8. Text Search
+    if (search && search.trim()) {
+      const s = search.trim();
+      query.$or = [
+        { business_name: new RegExp(s, 'i') },
+        { email: new RegExp(s, 'i') },
+        { phone: new RegExp(s, 'i') },
+        { city: new RegExp(s, 'i') },
+        { industry: new RegExp(s, 'i') }
+      ];
+    }
+
+    // Sorting
+    let sortOptions = { created_at: -1 };
+    if (sortBy === 'SCORE_DESC') sortOptions = { lead_score: -1, created_at: -1 };
+    else if (sortBy === 'OLDEST') sortOptions = { created_at: 1 };
+    else if (sortBy === 'NAME_ASC') sortOptions = { business_name: 1 };
+
+    const parsedLimit = limit === 'all' ? 5000 : Number(limit) || 1000;
+    const parsedPage = Number(page) || 1;
+
     const leads = await Lead.find(query)
       .populate('analysis')
-      .sort({ lead_score: -1, created_at: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .sort(sortOptions)
+      .skip((parsedPage - 1) * parsedLimit)
+      .limit(parsedLimit);
 
     const total = await Lead.countDocuments(query);
 
@@ -735,7 +819,7 @@ export const sendProposalEmailDirect = async (req, res) => {
       messageId: msgRecord._id,
       leadId: targetLeadId,
       message: sendResult.simulated
-        ? `Proposal logged & simulated successfully! (Add Gmail App Password in Settings to send live).`
+        ? `Proposal logged & simulated successfully! (Configure ZeptoMail or Gmail credentials in Settings to send live).`
         : `✅ Real email delivered to ${to}!`
     });
   } catch (error) {

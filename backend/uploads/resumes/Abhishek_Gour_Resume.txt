@@ -1,0 +1,25 @@
+=====================================================
+Abhishek Gour - Resume
+Contact: abhishek@leovexa.in | +91 98765 43210
+Location: Remote / Global
+LinkedIn: https://linkedin.com/in/abhishekgour | GitHub: https://github.com/AbhishekGour12
+=====================================================
+
+PROFESSIONAL SUMMARY:
+Full Stack & AI Engineer with 4+ years experience building high-scale distributed applications, modern React/Node systems, and autonomous AI agents.
+
+CORE SKILLS:
+- Languages & Frameworks: JavaScript (ES6+), TypeScript, React.js, Node.js, Express, Python
+- Database & Caching: MongoDB, PostgreSQL, Redis
+- Cloud & Architecture: AWS, Docker, RESTful APIs, WebSockets, Autonomous Agent Systems
+- AI / LLM Integrations: OpenAI, Gemini 1.5/2.0, Claude, OpenRouter, Prompt Engineering
+
+EXPERIENCE:
+Full Stack & AI Engineer | Leovexa Technologies
+- Architected enterprise outreach CRM with automated multi-channel lead discovery and AI pipeline.
+- Built high-throughput email and messaging automation handling thousands of requests daily.
+- Integrated automated verification, DNS sanity checks, and real-time telemetry.
+
+EDUCATION:
+Bachelor of Technology in Computer Science & Engineering
+=====================================================

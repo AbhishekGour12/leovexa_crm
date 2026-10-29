@@ -10,15 +10,19 @@ import {
   BookOpen,
   Sparkles,
   Zap,
-  Bot
+  Bot,
+  Mail,
+  Briefcase
 } from 'lucide-react';
 
 export const Sidebar = ({ activeTab, setActiveTab, counts = {} }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'greenhouse', label: 'Greenhouse Auto-Applier', icon: Briefcase, badge: '20/DAY', alert: false },
     { id: 'post_ingestor', label: 'AI Post & Pitch Pitcher', icon: Sparkles, badge: 'NEW', alert: false },
     { id: 'campaigns', label: 'Campaigns', icon: Target },
     { id: 'leads', label: 'Leads & Discovery', icon: Users, badge: counts.leads },
+    { id: 'email_logs', label: 'Email Outbox & Logs', icon: Mail, badge: counts.failedEmails, alert: counts.failedEmails > 0 },
     { id: 'approvals', label: 'Approval Queue', icon: CheckCircle2, badge: counts.pending, alert: counts.pending > 0 },
     { id: 'inbox', label: 'Inbox & AI Replies', icon: Inbox, badge: counts.replies },
     { id: 'pipeline', label: 'Deals Pipeline', icon: Kanban },
