@@ -93,6 +93,59 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
+export const deleteMultipleMessages = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Array of message IDs is required' });
+    }
+
+    await Message.deleteMany({ _id: { $in: ids } });
+    res.json({ success: true, message: `Successfully deleted ${ids.length} selected message(s)` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteAllMessages = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status && status !== 'ALL') {
+      filter.status = status;
+    }
+    const count = await Message.countDocuments(filter);
+    await Message.deleteMany(filter);
+    res.json({ success: true, message: `Successfully deleted ${count} message(s)` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const batchApproveMessages = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Array of message IDs is required' });
+    }
+
+    const messages = await Message.find({ _id: { $in: ids }, status: 'PENDING_APPROVAL' });
+    for (const msg of messages) {
+      msg.status = 'APPROVED';
+      msg.approval_source = 'HUMAN_BATCH';
+      await msg.save();
+
+      if (msg.lead_id) {
+        await Lead.findByIdAndUpdate(msg.lead_id, { status: 'APPROVED' });
+      }
+    }
+
+    res.json({ success: true, message: `Approved ${messages.length} pitch(es) for dispatch` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 export const getPendingApprovals = async (req, res) => {
   try {
     const pending = await Message.find({ status: 'PENDING_APPROVAL' })

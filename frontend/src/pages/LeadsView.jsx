@@ -31,6 +31,7 @@ import {
   Share2
 } from 'lucide-react';
 import { EmailLogsView } from './EmailLogsView';
+import { api } from '../services/api';
 
 export const LeadsView = ({
   leads = [],
@@ -40,10 +41,17 @@ export const LeadsView = ({
   onDeleteLead,
   onSeedDemo,
   onAiDiscover,
-  onTriggerDailyLeads
+  onTriggerDailyLeads,
+  onRefresh
 }) => {
   const [subTab, setSubTab] = useState('directory'); // 'directory' | 'email_logs'
   const [isFetchingDaily, setIsFetchingDaily] = useState(false);
+
+  // Bulk Selection & Batch Deletion
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -204,6 +212,22 @@ export const LeadsView = ({
       if (websiteFilter === 'HAS_WEBSITE' && !hasWeb) return false;
       if (websiteFilter === 'MANUAL' && lead.source !== 'MANUAL_IMPORT' && lead.source !== 'CSV Import') return false;
 
+      // 9. 100% Real / Verified Deliverable Only Filter
+      if (verifiedOnly) {
+        if (!lead.email || !lead.email.includes('@')) return false;
+        const eLower = lead.email.toLowerCase();
+        if (
+          eLower.includes('example.com') ||
+          eLower.includes('test.com') ||
+          eLower.includes('dummy') ||
+          eLower.includes('sample') ||
+          eLower.includes('fake') ||
+          eLower.includes('domain.com')
+        ) {
+          return false;
+        }
+      }
+
       return true;
     });
 
@@ -243,8 +267,73 @@ export const LeadsView = ({
     locationFilter,
     industryFilter,
     websiteFilter,
+    verifiedOnly,
     sortBy
   ]);
+
+  // Bulk Selection Handlers
+  const handleToggleSelect = (id, e) => {
+    if (e) e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllToggle = () => {
+    if (filteredLeads.length > 0 && selectedIds.size === filteredLeads.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredLeads.map(l => l._id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} selected lead(s)? This will also remove their cold pitch drafts and conversations.`)) {
+      return;
+    }
+    setIsDeletingBatch(true);
+    try {
+      const res = await api.deleteMultipleLeads(Array.from(selectedIds));
+      if (res.success) {
+        alert(res.message);
+        setSelectedIds(new Set());
+        if (onRefresh) onRefresh();
+        else window.location.reload();
+      } else {
+        alert(`Error deleting leads: ${res.error}`);
+      }
+    } catch (err) {
+      alert(`Delete error: ${err.message}`);
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
+
+  const handleDeleteAllLeads = async () => {
+    if (!window.confirm(`⚠️ DANGER: Are you sure you want to DELETE ALL ${leads.length} leads in the CRM?\n\nThis will completely wipe all lead records, analyses, and associated messages. This action CANNOT be undone.`)) {
+      return;
+    }
+    setIsClearingAll(true);
+    try {
+      const res = await api.deleteAllLeads();
+      if (res.success) {
+        alert(res.message);
+        setSelectedIds(new Set());
+        if (onRefresh) onRefresh();
+        else window.location.reload();
+      } else {
+        alert(`Error wiping leads: ${res.error}`);
+      }
+    } catch (err) {
+      alert(`Wipe error: ${err.message}`);
+    } finally {
+      setIsClearingAll(false);
+    }
+  };
 
   // Aggregate statistics for the current filtered view vs total
   const stats = useMemo(() => {
@@ -459,6 +548,25 @@ export const LeadsView = ({
             >
               <Download size={14} />
               <span>Export Filtered ({filteredLeads.length})</span>
+            </button>
+
+            <button
+              onClick={handleDeleteAllLeads}
+              disabled={isClearingAll || leads.length === 0}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.82rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.08)'
+              }}
+              title="Delete all leads from CRM"
+            >
+              <Trash2 size={14} color="#f87171" />
+              <span>{isClearingAll ? 'Clearing...' : 'Delete All Leads'}</span>
             </button>
 
             {onOpenNewLead && (
@@ -889,6 +997,30 @@ export const LeadsView = ({
                 ))}
               </select>
 
+              {/* Real / Verified Filter Toggle */}
+              <button
+                type="button"
+                onClick={() => setVerifiedOnly(!verifiedOnly)}
+                className="btn"
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '0.78rem',
+                  fontWeight: verifiedOnly ? '700' : '600',
+                  borderRadius: 'var(--radius-sm)',
+                  background: verifiedOnly ? 'rgba(16, 185, 129, 0.22)' : 'rgba(255, 255, 255, 0.04)',
+                  color: verifiedOnly ? '#6ee7b7' : 'var(--text-muted)',
+                  border: verifiedOnly ? '1px solid rgba(16, 185, 129, 0.55)' : '1px solid var(--border-subtle)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Filter out dummy / placeholder test data and keep authentic deliverable leads"
+              >
+                <ShieldCheck size={14} color={verifiedOnly ? '#10b981' : 'var(--text-muted)'} />
+                <span>{verifiedOnly ? '✓ 100% Real / Verified' : 'Real / Verified Only'}</span>
+              </button>
+
               {/* Reset All Filters Button */}
               {isAnyFilterActive && (
                 <button
@@ -1056,6 +1188,58 @@ export const LeadsView = ({
               </span>
             </div>
 
+            {/* Bulk Selection Action Toolbar */}
+            {selectedIds.size > 0 && (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(220, 38, 38, 0.1) 100%)',
+                  borderBottom: '1px solid rgba(239, 68, 68, 0.35)',
+                  padding: '12px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fecaca' }}>
+                    ☑️ {selectedIds.size} of {filteredLeads.length} leads selected
+                  </span>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Deselect All
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={handleDeleteSelected}
+                    disabled={isDeletingBatch}
+                    className="btn"
+                    style={{
+                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                      color: '#fff',
+                      fontSize: '0.82rem',
+                      padding: '6px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      borderRadius: '6px',
+                      fontWeight: '700',
+                      boxShadow: '0 2px 10px rgba(239, 68, 68, 0.35)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    <span>{isDeletingBatch ? 'Deleting...' : `Delete Selected (${selectedIds.size})`}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {filteredLeads.length === 0 ? (
               <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <Users size={44} style={{ opacity: 0.25, marginBottom: '14px' }} />
@@ -1091,6 +1275,17 @@ export const LeadsView = ({
                         letterSpacing: '0.05em'
                       }}
                     >
+                      {/* Select All Checkbox */}
+                      <th style={{ width: '42px', padding: '14px 16px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={filteredLeads.length > 0 && selectedIds.size === filteredLeads.length}
+                          onChange={handleSelectAllToggle}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#6366f1' }}
+                          title="Select / Deselect All Filtered Leads"
+                        />
+                      </th>
+
                       {/* Column 1: Business & Industry */}
                       <th
                         style={{ padding: '14px 18px', cursor: 'pointer', userSelect: 'none' }}
@@ -1156,12 +1351,27 @@ export const LeadsView = ({
                           style={{
                             borderBottom: '1px solid var(--border-subtle)',
                             cursor: 'pointer',
+                            background: selectedIds.has(lead._id) ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
                             transition: 'background 0.15s ease'
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                          onMouseEnter={(e) => {
+                            if (!selectedIds.has(lead._id)) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = selectedIds.has(lead._id) ? 'rgba(99, 102, 241, 0.08)' : 'transparent';
+                          }}
                           onClick={() => onSelectLead(lead)}
                         >
+                          {/* Row Selection Checkbox */}
+                          <td style={{ width: '42px', padding: '14px 16px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(lead._id)}
+                              onChange={(e) => handleToggleSelect(lead._id, e)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#6366f1' }}
+                            />
+                          </td>
+
                           {/* 1. Business Name & Industry */}
                           <td style={{ padding: '14px 18px' }}>
                             <div

@@ -65,6 +65,11 @@ export const GreenhouseJobsView = () => {
   const [channelFilter, setChannelFilter] = useState('ALL'); // 'ALL' | 'DIRECT_EMAIL' | 'GREENHOUSE_API'
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Bulk selection & deletion
+  const [selectedAppIds, setSelectedAppIds] = useState(new Set());
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+
   // Live Explorer
   const [explorerBoard, setExplorerBoard] = useState('okta');
   const [explorerKeyword, setExplorerKeyword] = useState('');
@@ -259,11 +264,83 @@ export const GreenhouseJobsView = () => {
       const res = await api.deleteGreenhouseApplication(appId);
       if (res.success) {
         setApplications(prev => prev.filter(a => a._id !== appId));
+        setSelectedAppIds(prev => {
+          const next = new Set(prev);
+          next.delete(appId);
+          return next;
+        });
         if (selectedApp?._id === appId) setSelectedApp(null);
         fetchDashboard();
       }
     } catch (e) {
       alert(`Delete error: ${e.message}`);
+    }
+  };
+
+  // Toggle selection for an application
+  const handleToggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelectedAppIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Toggle select all applications
+  const handleSelectAllToggle = () => {
+    if (selectedAppIds.size === applications.length) {
+      setSelectedAppIds(new Set());
+    } else {
+      setSelectedAppIds(new Set(applications.map(a => a._id)));
+    }
+  };
+
+  // Batch delete selected applications
+  const handleDeleteSelected = async () => {
+    if (selectedAppIds.size === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedAppIds.size} selected job application(s)?`)) return;
+
+    try {
+      setIsDeletingBatch(true);
+      const res = await api.deleteMultipleGreenhouseApplications(Array.from(selectedAppIds));
+      if (res.success) {
+        setApplications(prev => prev.filter(a => !selectedAppIds.has(a._id)));
+        setSelectedAppIds(new Set());
+        fetchDashboard();
+      } else {
+        alert(res.error || 'Failed to delete selected applications');
+      }
+    } catch (e) {
+      alert(`Batch delete error: ${e.message}`);
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
+
+  // Delete all applications
+  const handleDeleteAllApplications = async () => {
+    if (applications.length === 0) return;
+    if (!window.confirm(`⚠️ WARNING: Are you sure you want to delete ALL (${applications.length}) job application records? This action cannot be undone.`)) return;
+
+    try {
+      setIsClearingAll(true);
+      const res = await api.deleteAllGreenhouseApplications();
+      if (res.success) {
+        setApplications([]);
+        setSelectedAppIds(new Set());
+        fetchDashboard();
+      } else {
+        alert(res.error || 'Failed to delete all applications');
+      }
+    } catch (e) {
+      alert(`Delete all error: ${e.message}`);
+    } finally {
+      setIsClearingAll(false);
     }
   };
 
@@ -739,22 +816,104 @@ export const GreenhouseJobsView = () => {
           </button>
         </div>
 
-        <button
-          onClick={() => {
-            fetchDashboard();
-            fetchApplications();
-          }}
-          className="btn btn-secondary"
-          style={{ padding: '8px 12px', fontSize: '0.8rem' }}
-        >
-          <RefreshCw size={14} style={{ marginRight: '6px' }} />
-          Refresh
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {activeSubView === 'tracker' && (
+            <button
+              onClick={handleDeleteAllApplications}
+              disabled={applications.length === 0 || isClearingAll}
+              className="btn btn-danger"
+              style={{
+                padding: '8px 12px',
+                fontSize: '0.8rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                opacity: applications.length === 0 ? 0.5 : 1
+              }}
+              title="Delete all application records"
+            >
+              <Trash2 size={14} />
+              <span>{isClearingAll ? 'Deleting All...' : `Delete All Jobs (${applications.length})`}</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              fetchDashboard();
+              fetchApplications();
+            }}
+            className="btn btn-secondary"
+            style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+          >
+            <RefreshCw size={14} style={{ marginRight: '6px' }} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* 📋 VIEW 1: APPLICATIONS TRACKER */}
       {activeSubView === 'tracker' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Floating Bulk Action Bar */}
+          {selectedAppIds.size > 0 && (
+            <div style={{
+              position: 'sticky',
+              top: '10px',
+              zIndex: 30,
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(15, 23, 42, 0.95))',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 20px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              backdropFilter: 'blur(12px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <CheckCircle2 size={18} color="#ef4444" />
+                <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#fff' }}>
+                  {selectedAppIds.size} job application{selectedAppIds.size > 1 ? 's' : ''} selected
+                </span>
+                <button
+                  onClick={() => setSelectedAppIds(new Set())}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-dim)',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Clear selection
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={isDeletingBatch}
+                  className="btn btn-danger"
+                  style={{
+                    padding: '7px 16px',
+                    fontSize: '0.82rem',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 0 16px rgba(239, 68, 68, 0.35)'
+                  }}
+                >
+                  <Trash2 size={14} />
+                  <span>{isDeletingBatch ? 'Deleting...' : `Delete Selected (${selectedAppIds.size})`}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Filters Bar */}
           <div className="glass-panel" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>

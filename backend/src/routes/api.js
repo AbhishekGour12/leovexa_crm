@@ -6,6 +6,8 @@ import {
   createLead,
   updateLead,
   deleteLead,
+  deleteMultipleLeads,
+  deleteAllLeads,
   triggerResearch,
   importCsvLeads,
   downloadDemoTemplate,
@@ -34,7 +36,10 @@ import {
   getFollowupSequences,
   triggerManualFollowup,
   resendMessage,
-  deleteMessage
+  deleteMessage,
+  deleteMultipleMessages,
+  deleteAllMessages,
+  batchApproveMessages
 } from '../controllers/messageController.js';
 import {
   getDeals,
@@ -59,6 +64,8 @@ import {
   getApplicationById,
   updateApplicationStatus,
   deleteApplication,
+  deleteMultipleApplications,
+  deleteAllApplications,
   exploreBoardJobs,
   applySingleJob,
   triggerDailyCycle,
@@ -78,6 +85,8 @@ router.get('/analytics/dashboard', getDashboardStats);
 // Leads
 router.get('/leads', getLeads);
 router.get('/leads/download-template', downloadDemoTemplate);
+router.post('/leads/batch-delete', deleteMultipleLeads);
+router.delete('/leads/all', deleteAllLeads);
 router.get('/leads/:id', getLeadById);
 router.post('/leads', createLead);
 router.put('/leads/:id', updateLead);
@@ -100,6 +109,9 @@ router.delete('/campaigns/:id', deleteCampaign);
 
 // Messages & Approvals
 router.get('/messages', getMessages);
+router.post('/messages/batch-delete', deleteMultipleMessages);
+router.delete('/messages/all', deleteAllMessages);
+router.post('/messages/batch-approve', batchApproveMessages);
 router.get('/messages/pending-approvals', getPendingApprovals);
 router.get('/messages/followup-sequences', getFollowupSequences);
 router.post('/messages/trigger-followup', triggerManualFollowup);
@@ -130,6 +142,8 @@ router.post('/settings/test-gmail', testEmailSmtp);
 // Greenhouse Job Board API & Auto-Applier Layer
 router.get('/greenhouse/dashboard', getGreenhouseDashboard);
 router.get('/greenhouse/applications', getApplications);
+router.post('/greenhouse/applications/batch-delete', deleteMultipleApplications);
+router.delete('/greenhouse/applications/all', deleteAllApplications);
 router.get('/greenhouse/applications/:id', getApplicationById);
 router.put('/greenhouse/applications/:id/status', updateApplicationStatus);
 router.delete('/greenhouse/applications/:id', deleteApplication);

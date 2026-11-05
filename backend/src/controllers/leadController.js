@@ -197,6 +197,46 @@ export const deleteLead = async (req, res) => {
   }
 };
 
+export const deleteMultipleLeads = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Array of lead IDs is required' });
+    }
+
+    await Lead.deleteMany({ _id: { $in: ids } });
+    await LeadAnalysis.deleteMany({ lead_id: { $in: ids } });
+    await Message.deleteMany({ lead_id: { $in: ids } });
+    await Conversation.deleteMany({ lead_id: { $in: ids } });
+    await Deal.deleteMany({ lead_id: { $in: ids } });
+
+    res.json({
+      success: true,
+      message: `Successfully deleted ${ids.length} selected lead(s) and associated records.`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const deleteAllLeads = async (req, res) => {
+  try {
+    const count = await Lead.countDocuments();
+    await Lead.deleteMany({});
+    await LeadAnalysis.deleteMany({});
+    await Message.deleteMany({});
+    await Conversation.deleteMany({});
+    await Deal.deleteMany({});
+
+    res.json({
+      success: true,
+      message: `Successfully wiped all ${count} leads and all related CRM data.`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 export const downloadDemoTemplate = async (req, res) => {
   try {
     const csvContent = `business_name,email,phone,city,industry,website

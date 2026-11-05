@@ -126,6 +126,32 @@ export const deleteApplication = async (req, res) => {
   }
 };
 
+// Batch Delete Selected Applications
+export const deleteMultipleApplications = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Array of application IDs is required' });
+    }
+
+    await GreenhouseJobApplication.deleteMany({ _id: { $in: ids } });
+    res.json({ success: true, message: `Successfully removed ${ids.length} application(s)` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Delete All Applications
+export const deleteAllApplications = async (req, res) => {
+  try {
+    const count = await GreenhouseJobApplication.countDocuments();
+    await GreenhouseJobApplication.deleteMany({});
+    res.json({ success: true, message: `Successfully deleted all ${count} job application records` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // Live Greenhouse Board Explorer: Query live jobs for any board token
 export const exploreBoardJobs = async (req, res) => {
   try {

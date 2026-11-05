@@ -332,6 +332,7 @@ export function App() {
               onSeedDemo={handleSeedDemo}
               onAiDiscover={handleAiDiscover}
               onTriggerDailyLeads={handleTriggerDailyLeads}
+              onRefresh={fetchAllData}
             />
           )}
 
@@ -347,6 +348,7 @@ export function App() {
               onOpenApprovalModal={(msg) => setSelectedApprovalMsg(msg)}
               onApprove={handleApproveMessage}
               onReject={handleRejectMessage}
+              onRefresh={fetchAllData}
             />
           )}
 

@@ -106,6 +106,22 @@ export const api = {
     return res.json();
   },
 
+  async deleteMultipleLeads(ids) {
+    const res = await fetch(`${API_BASE}/leads/batch-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    return res.json();
+  },
+
+  async deleteAllLeads() {
+    const res = await fetch(`${API_BASE}/leads/all`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
   // Campaigns
   async getCampaigns() {
     const res = await fetch(`${API_BASE}/campaigns`);
@@ -138,6 +154,32 @@ export const api = {
   async deleteMessage(id) {
     const res = await fetch(`${API_BASE}/messages/${id}`, {
       method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async deleteMultipleMessages(ids) {
+    const res = await fetch(`${API_BASE}/messages/batch-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    return res.json();
+  },
+
+  async deleteAllMessages(status = 'ALL') {
+    const query = status && status !== 'ALL' ? `?status=${status}` : '';
+    const res = await fetch(`${API_BASE}/messages/all${query}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async batchApproveMessages(ids) {
+    const res = await fetch(`${API_BASE}/messages/batch-approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
     });
     return res.json();
   },
@@ -335,6 +377,22 @@ export const api = {
 
   async deleteGreenhouseApplication(id) {
     const res = await fetch(`${API_BASE}/greenhouse/applications/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async deleteMultipleGreenhouseApplications(ids) {
+    const res = await fetch(`${API_BASE}/greenhouse/applications/batch-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    return res.json();
+  },
+
+  async deleteAllGreenhouseApplications() {
+    const res = await fetch(`${API_BASE}/greenhouse/applications/all`, {
       method: 'DELETE'
     });
     return res.json();

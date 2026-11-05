@@ -32,6 +32,11 @@ export const EmailLogsView = ({ onSelectLead }) => {
   const [resendingId, setResendingId] = useState(null);
   const [batchResending, setBatchResending] = useState(false);
 
+  // Bulk Selection & Batch Deletion
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+
   // Filter States
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, SENT, FAILED, QUEUED, REPLIED
@@ -121,6 +126,69 @@ export const EmailLogsView = ({ onSelectLead }) => {
       if (selectedMsg && selectedMsg._id === id) setSelectedMsg(null);
     } catch (e) {
       alert(`Delete error: ${e.message}`);
+    }
+  };
+
+  const handleToggleSelect = (id, e) => {
+    if (e) e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllToggle = () => {
+    if (filteredMessages.length > 0 && selectedIds.size === filteredMessages.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredMessages.map(m => m._id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} selected email log(s)?`)) return;
+
+    setIsDeletingBatch(true);
+    try {
+      const res = await api.deleteMultipleMessages(Array.from(selectedIds));
+      if (res.success) {
+        alert(res.message);
+        setMessages(prev => prev.filter(m => !selectedIds.has(m._id)));
+        setSelectedIds(new Set());
+        if (selectedMsg && selectedIds.has(selectedMsg._id)) setSelectedMsg(null);
+      } else {
+        alert(`Error: ${res.error}`);
+      }
+    } catch (err) {
+      alert(`Delete error: ${err.message}`);
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
+
+  const handleClearAllLogs = async () => {
+    const scopeLabel = statusFilter !== 'ALL' ? `ALL ${statusFilter}` : 'ALL outbound';
+    if (!window.confirm(`⚠️ Are you sure you want to delete ${scopeLabel} email logs? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsClearingAll(true);
+    try {
+      const res = await api.deleteAllMessages(statusFilter);
+      if (res.success) {
+        alert(res.message);
+        setSelectedIds(new Set());
+        fetchLogs();
+      } else {
+        alert(`Error: ${res.error}`);
+      }
+    } catch (err) {
+      alert(`Clear logs error: ${err.message}`);
+    } finally {
+      setIsClearingAll(false);
     }
   };
 
@@ -516,6 +584,25 @@ export const EmailLogsView = ({ onSelectLead }) => {
             </button>
 
             <button
+              onClick={handleClearAllLogs}
+              disabled={isClearingAll || messages.length === 0}
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.82rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.08)'
+              }}
+              title="Delete all logs from history"
+            >
+              <Trash2 size={14} color="#f87171" />
+              <span>{isClearingAll ? 'Clearing...' : 'Clear All Logs'}</span>
+            </button>
+
+            <button
               onClick={handleManualRefresh}
               disabled={refreshing}
               className="btn btn-secondary"
@@ -635,6 +722,58 @@ export const EmailLogsView = ({ onSelectLead }) => {
           </span>
         </div>
 
+        {/* Bulk Selection Toolbar */}
+        {selectedIds.size > 0 && (
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(220, 38, 38, 0.1) 100%)',
+              borderBottom: '1px solid rgba(239, 68, 68, 0.35)',
+              padding: '12px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fecaca' }}>
+                ☑️ {selectedIds.size} of {filteredMessages.length} logs selected
+              </span>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Deselect All
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={isDeletingBatch}
+                className="btn"
+                style={{
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  color: '#fff',
+                  fontSize: '0.82rem',
+                  padding: '6px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderRadius: '6px',
+                  fontWeight: '700',
+                  boxShadow: '0 2px 10px rgba(239, 68, 68, 0.35)',
+                  cursor: 'pointer'
+                }}
+              >
+                <Trash2 size={14} />
+                <span>{isDeletingBatch ? 'Deleting...' : `Delete Selected (${selectedIds.size})`}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
             <div className="animate-spin" style={{ display: 'inline-block', marginBottom: '10px' }}>
@@ -657,6 +796,15 @@ export const EmailLogsView = ({ onSelectLead }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
               <thead>
                 <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <th style={{ width: '42px', padding: '14px 16px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={filteredMessages.length > 0 && selectedIds.size === filteredMessages.length}
+                      onChange={handleSelectAllToggle}
+                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#6366f1' }}
+                      title="Select / Deselect All Logs"
+                    />
+                  </th>
                   <th style={{ padding: '14px 20px' }}>Recipient & Prospect</th>
                   <th style={{ padding: '14px 16px' }}>Subject & Snippet</th>
                   <th style={{ padding: '14px 16px' }}>Status</th>
@@ -677,13 +825,35 @@ export const EmailLogsView = ({ onSelectLead }) => {
                       onClick={() => setSelectedMsg(msg)}
                       style={{
                         borderBottom: '1px solid var(--border-subtle)',
-                        background: isFailed ? 'rgba(239, 68, 68, 0.03)' : 'transparent',
+                        background: selectedIds.has(msg._id)
+                          ? 'rgba(99, 102, 241, 0.08)'
+                          : isFailed
+                          ? 'rgba(239, 68, 68, 0.03)'
+                          : 'transparent',
                         cursor: 'pointer',
                         transition: 'background 0.15s ease'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = isFailed ? 'rgba(239, 68, 68, 0.07)' : 'rgba(255, 255, 255, 0.04)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = isFailed ? 'rgba(239, 68, 68, 0.03)' : 'transparent'}
+                      onMouseEnter={(e) => {
+                        if (!selectedIds.has(msg._id)) e.currentTarget.style.background = isFailed ? 'rgba(239, 68, 68, 0.07)' : 'rgba(255, 255, 255, 0.04)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = selectedIds.has(msg._id)
+                          ? 'rgba(99, 102, 241, 0.08)'
+                          : isFailed
+                          ? 'rgba(239, 68, 68, 0.03)'
+                          : 'transparent';
+                      }}
                     >
+                      {/* Selection Checkbox */}
+                      <td style={{ width: '42px', padding: '14px 16px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(msg._id)}
+                          onChange={(e) => handleToggleSelect(msg._id, e)}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#6366f1' }}
+                        />
+                      </td>
+
                       {/* Recipient info */}
                       <td style={{ padding: '14px 20px' }}>
                         <div style={{ fontWeight: '700', color: '#fff', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -26,8 +26,68 @@ class EmailValidatorService {
     this.blacklistedDomains = new Set([
       'example.com', 'test.com', 'sample.com', 'dummy.com', 'placeholder.com',
       'domain.com', 'website.com', 'fake.com', 'tempmail.com', 'mailinator.com',
-      '10minutemail.com', 'guerrillamail.com'
+      '10minutemail.com', 'guerrillamail.com', 'email.com', 'invalid.com',
+      'testmail.com', 'company.com', 'mycompany.com', 'yourcompany.com',
+      'yourbusiness.com', 'clinicname.com', 'businessname.com', 'sitedomain.com',
+      'none.com', 'noemail.com', 'na.com', 'null.com', 'sampleclinic.com',
+      'democlinic.com', 'testbusiness.com', 'xyz.com', 'abc.com'
     ]);
+    this.blacklistedPrefixes = new Set([
+      'test', 'dummy', 'fake', 'sample', 'user', 'name', 'john.doe', 'placeholder',
+      'email', 'asdf', 'qwerty', 'admin@example', 'info@example', 'contact@example',
+      'xyz', 'abc', 'noemail', 'null', 'na'
+    ]);
+  }
+
+  // Check if lead or email has synthetic/dummy placeholder patterns
+  isFakeOrDummyLead(leadOrEmail) {
+    if (!leadOrEmail) return { isFake: true, reason: 'Empty data' };
+
+    const email = typeof leadOrEmail === 'string' ? leadOrEmail : (leadOrEmail.email || '');
+    const businessName = typeof leadOrEmail === 'object' ? (leadOrEmail.business_name || '') : '';
+    const website = typeof leadOrEmail === 'object' ? (leadOrEmail.website || '') : '';
+    const phone = typeof leadOrEmail === 'object' ? (leadOrEmail.phone || '') : '';
+
+    if (email) {
+      const cleanEmail = email.trim().toLowerCase();
+      const [localPart, domain] = cleanEmail.split('@');
+
+      if (!domain || this.blacklistedDomains.has(domain)) {
+        return { isFake: true, reason: `Blacklisted placeholder domain: ${domain}` };
+      }
+
+      if (domain.endsWith('.test') || domain.endsWith('.example') || domain.endsWith('.invalid') || domain.endsWith('.localhost')) {
+        return { isFake: true, reason: `RFC reserved test TLD: ${domain}` };
+      }
+
+      if (this.blacklistedPrefixes.has(localPart)) {
+        return { isFake: true, reason: `Suspicious dummy local part: ${localPart}` };
+      }
+    }
+
+    if (businessName) {
+      const bLower = businessName.trim().toLowerCase();
+      const fakeNameRegex = /^(sample|demo|test|dummy|fake|placeholder|xyz company|abc company|your business|company name|my clinic)\b/i;
+      if (fakeNameRegex.test(bLower) || bLower === 'business prospect' || bLower === 'clinic prospect') {
+        return { isFake: true, reason: `Placeholder business name: ${businessName}` };
+      }
+    }
+
+    if (website) {
+      const wLower = website.trim().toLowerCase();
+      if (wLower.includes('example.com') || wLower.includes('test.com') || wLower.includes('placeholder.com') || wLower.includes('dummy.com')) {
+        return { isFake: true, reason: `Placeholder website URL: ${website}` };
+      }
+    }
+
+    if (phone) {
+      const pClean = phone.replace(/[^0-9]/g, '');
+      if (pClean.startsWith('55501') || pClean === '1234567890' || /^0+$/.test(pClean) || /^9+$/.test(pClean) && pClean.length > 9) {
+        return { isFake: true, reason: `Fake placeholder phone number: ${phone}` };
+      }
+    }
+
+    return { isFake: false };
   }
 
   // 1. Basic format & syntax check (Ultra Fast regex)
@@ -81,6 +141,14 @@ class EmailValidatorService {
       };
     }
 
+    const fakeCheck = this.isFakeOrDummyLead(email);
+    if (fakeCheck.isFake) {
+      return {
+        valid: false,
+        reason: fakeCheck.reason
+      };
+    }
+
     const cleanEmail = email.trim().toLowerCase();
     const domain = cleanEmail.split('@')[1];
 
@@ -111,7 +179,14 @@ class EmailValidatorService {
   async filterValidLeads(leads) {
     const results = await Promise.all(
       leads.map(async (lead) => {
-        if (!lead.email) return null;
+        if (!lead || !lead.email) return null;
+
+        const fakeCheck = this.isFakeOrDummyLead(lead);
+        if (fakeCheck.isFake) {
+          console.warn(`🛑 Filtered fake/dummy lead: ${lead.business_name || lead.email} (${fakeCheck.reason})`);
+          return null;
+        }
+
         const res = await this.verifyEmail(lead.email);
         if (res.valid) {
           lead.email = res.email;

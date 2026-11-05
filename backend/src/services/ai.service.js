@@ -302,18 +302,31 @@ Return JSON ONLY:
   async discoverLeadsWithAI({ country = 'USA', industry = 'Dental Healthcare', count = 10, city = '' }) {
     const prompt = `
 You are Leovexa's autonomous global business discovery & prospecting intelligence engine.
-Find/Generate a list of exactly ${count} highly realistic, high-ticket B2B business prospects for:
+Find a list of exactly ${count} 100% REAL, GENUINE, HIGH-TICKET B2B business prospects for:
 - Industry/Niche: ${industry}
 - Country: ${country}
 - Target City / Region: ${city || (country === 'USA' ? 'California / Texas / New York / Florida' : country === 'UK' ? 'London / Manchester / Birmingham' : country === 'UAE' ? 'Dubai / Abu Dhabi' : country === 'Canada' ? 'Toronto / Vancouver' : country === 'Australia' ? 'Sydney / Melbourne' : 'Indore / Mumbai / Delhi / Bangalore')}
 
-For each business, generate:
-1. "business_name": Authentic realistic local business / clinic / agency name in that region.
-2. "website": Realistic website URL (e.g. "https://www.drsmithdentalny.com").
-3. "email": Valid corporate decision maker email format (e.g. "info@drsmithdentalny.com" or "contact@...").
-4. "phone": Realistic phone number with appropriate country dialing code (+1 for USA/Canada, +44 for UK, +971 for UAE, +61 for Australia, +91 for India).
+CRITICAL AUTHENTICITY & ANTI-FAKE FILTER RULES (STRICTLY ENFORCED):
+1. ABSOLUTELY ZERO FAKE / SYNTHETIC / DUMMY LEADS:
+   - Do NOT generate fictitious or placeholder business names like "Sample Clinic", "Demo Hospital", "ABC Solutions", "XYZ Enterprise", "Test Business", "Clinic Prospect".
+   - Every business MUST be a real, operating physical clinic, luxury brand, banquet, or business in that city.
+2. 100% REAL CORPORATE CONTACT EMAILS:
+   - NEVER generate emails with "@example.com", "@test.com", "@domain.com", "@website.com", or synthetic generic emails.
+   - Use the business's real corporate domain email (e.g. appointments@realclinic.com, info@realclinic.com, contact@...).
+   - The email MUST have a real deliverable domain that exists on the internet.
+3. REAL WORKING WEBSITES:
+   - Real website URLs only (e.g. https://www.reallocalclinic.com). No "example.com" or placeholder text.
+4. REAL PHONE & LOCATION:
+   - Actual clinic/business telephone numbers with proper country code.
+
+For each business, provide:
+1. "business_name": Genuine real business / clinic name.
+2. "website": Official website URL.
+3. "email": Valid corporate contact / inquiries email.
+4. "phone": Realistic telephone number.
 5. "city": City name in that country.
-6. "state": State/Province.
+6. "state": State / Region.
 7. "country": "${country}".
 8. "estimated_score": Number between 75 and 95 (based on high conversion potential for web redesign, CRM automation & appointment booking).
 9. "pain_points": Array of 2-3 specific observed digital weaknesses (e.g. "Missing 24/7 online booking flow", "Slow mobile landing page", "No automated SMS/Email reminder funnel").
