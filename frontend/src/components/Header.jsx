@@ -6,10 +6,22 @@ import {
   Flame,
   Search,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Play,
+  Pause
 } from 'lucide-react';
 
-export const Header = ({ title, subtitle, onOpenNewLead, onOpenNewCampaign, onSeedDemo, notifications = [] }) => {
+export const Header = ({
+  title,
+  subtitle,
+  onOpenNewLead,
+  onOpenNewCampaign,
+  onSeedDemo,
+  notifications = [],
+  automationActive = true,
+  onToggleAutomation,
+  isTogglingAutomation = false
+}) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -39,6 +51,49 @@ export const Header = ({ title, subtitle, onOpenNewLead, onOpenNewCampaign, onSe
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Global Stop / Resume Automation Pill */}
+        {onToggleAutomation && (
+          <button
+            onClick={() => onToggleAutomation(automationActive ? 'PAUSE' : 'RESUME')}
+            disabled={isTogglingAutomation}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: automationActive ? '1px solid rgba(239, 68, 68, 0.45)' : '1px solid rgba(16, 185, 129, 0.55)',
+              background: automationActive ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.15)',
+              color: automationActive ? '#fca5a5' : '#86efac',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: isTogglingAutomation ? 'not-allowed' : 'pointer',
+              fontSize: '0.78rem',
+              fontWeight: '700',
+              transition: 'all 0.2s ease'
+            }}
+            title={automationActive ? 'Click to STOP automatic background lead fetch and email sending' : 'Click to RESUME 24/7 background automation'}
+          >
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: automationActive ? '#10b981' : '#f59e0b',
+              display: 'inline-block',
+              boxShadow: automationActive ? '0 0 8px #10b981' : '0 0 8px #f59e0b'
+            }} />
+            {automationActive ? (
+              <>
+                <Pause size={12} />
+                <span>Auto: Running (Stop)</span>
+              </>
+            ) : (
+              <>
+                <Play size={12} fill="#86efac" />
+                <span>Auto: Stopped (Resume)</span>
+              </>
+            )}
+          </button>
+        )}
+
         {/* Seed Demo Button */}
         <button
           onClick={onSeedDemo}

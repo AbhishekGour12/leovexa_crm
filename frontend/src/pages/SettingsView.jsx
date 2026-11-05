@@ -317,7 +317,9 @@ export const SettingsView = ({ onNavigateToGuide }) => {
                 host: settings.smtp_host,
                 port: settings.smtp_port,
                 user: settings.email_provider === 'gmail' ? settings.gmail_user : settings.smtp_user,
-                pass: settings.email_provider === 'gmail' ? settings.gmail_app_password : settings.smtp_pass
+                pass: settings.email_provider === 'gmail' ? settings.gmail_app_password : settings.smtp_pass,
+                gmail_user: settings.gmail_user,
+                gmail_app_password: settings.gmail_app_password
               }))}
               className="btn btn-secondary"
               style={{ fontSize: '0.78rem', padding: '7px 14px', borderColor: 'rgba(56, 189, 248, 0.4)' }}
@@ -493,6 +495,25 @@ export const SettingsView = ({ onNavigateToGuide }) => {
               {testResults.smtp.success ? '✅ ' : '❌ '} {testResults.smtp.message}
             </div>
           )}
+
+          {/* Automatic Fallback Protection Notice */}
+          <div style={{
+            marginTop: '14px',
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-sm)',
+            background: 'rgba(56, 189, 248, 0.08)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '0.78rem',
+            color: '#bae6fd'
+          }}>
+            <ShieldCheck size={18} color="#38bdf8" style={{ flexShrink: 0 }} />
+            <span>
+              <b>Smart Gmail Fallback Protection Active:</b> If Zoho ZeptoMail encounters unverified domain restrictions, authentication blocks, or rate limits, the dispatch engine <b>automatically fails over to Gmail</b> to ensure your prospect emails never fail or get dropped.
+            </span>
+          </div>
         </div>
 
         {/* Section 5: Autonomous Pipeline & Daily 50 Leads Schedule */}

@@ -24,7 +24,9 @@ import {
   Layers,
   Globe,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Play,
+  Pause
 } from 'lucide-react';
 
 export const Dashboard = ({
@@ -35,7 +37,9 @@ export const Dashboard = ({
   onSeedDemo,
   onAiDiscover,
   onOpenNewLead,
-  onTriggerDailyLeads
+  onTriggerDailyLeads,
+  onToggleAutomation,
+  isTogglingAutomation = false
 }) => {
   const [selectedTimeframe, setSelectedTimeframe] = useState('TODAY'); // 'TODAY' | 'YESTERDAY' | '7DAYS' | 'ALL'
   const [analyticsSubView, setAnalyticsSubView] = useState('funnel'); // 'funnel' | 'breakdown' | 'sources'
@@ -60,6 +64,9 @@ export const Dashboard = ({
   const statusBreakdown = data.statusBreakdown || {};
   const recentActivity = data.recentActivity || [];
   const engineHealth = data.engineHealth || {};
+  const isAutomationActive = engineHealth.automationActive !== undefined 
+    ? engineHealth.automationActive 
+    : (engineHealth.workerStatus !== 'PAUSED');
   const hotLeads = data.hotLeads || [];
   const aiLogs = data.aiLogs || {};
 
@@ -130,19 +137,72 @@ export const Dashboard = ({
       }}>
         <div style={{ zIndex: 2, maxWidth: '640px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
-            <span className="badge badge-high" style={{
-              background: 'rgba(99, 102, 241, 0.25)',
-              color: '#c7d2fe',
-              borderColor: 'rgba(99, 102, 241, 0.5)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '4px 10px',
-              fontSize: '0.78rem'
-            }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 8px #10b981' }} />
-              24/7 Autonomous Scraper & Outreach Active
-            </span>
+            {isAutomationActive ? (
+              <span className="badge badge-high" style={{
+                background: 'rgba(16, 185, 129, 0.16)',
+                color: '#6ee7b7',
+                borderColor: 'rgba(16, 185, 129, 0.45)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: '700'
+              }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 8px #10b981' }} />
+                24/7 Automation Active (Auto-Fetch & Auto-Send)
+              </span>
+            ) : (
+              <span className="badge badge-medium" style={{
+                background: 'rgba(245, 158, 11, 0.2)',
+                color: '#fde68a',
+                borderColor: 'rgba(245, 158, 11, 0.5)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                fontWeight: '700'
+              }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block', boxShadow: '0 0 8px #f59e0b' }} />
+                ⏸️ Automation Stopped (Manual Mode Only)
+              </span>
+            )}
+
+            {/* Stop / Resume Button */}
+            <button
+              onClick={() => onToggleAutomation && onToggleAutomation(isAutomationActive ? 'PAUSE' : 'RESUME')}
+              disabled={isTogglingAutomation}
+              className="btn"
+              style={{
+                fontSize: '0.75rem',
+                padding: '4px 12px',
+                borderRadius: '6px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontWeight: '700',
+                cursor: isTogglingAutomation ? 'not-allowed' : 'pointer',
+                background: isAutomationActive ? 'rgba(239, 68, 68, 0.18)' : 'linear-gradient(135deg, #10b981, #059669)',
+                color: isAutomationActive ? '#fca5a5' : '#fff',
+                border: isAutomationActive ? '1px solid rgba(239, 68, 68, 0.45)' : 'none',
+                boxShadow: isAutomationActive ? 'none' : '0 2px 8px rgba(16, 185, 129, 0.4)'
+              }}
+              title={isAutomationActive ? 'Click to stop auto-fetch leads and auto-send emails' : 'Click to resume 24/7 background automation'}
+            >
+              {isAutomationActive ? (
+                <>
+                  <Pause size={12} />
+                  <span>Stop Automation</span>
+                </>
+              ) : (
+                <>
+                  <Play size={12} fill="#fff" />
+                  <span>Resume Automation</span>
+                </>
+              )}
+            </button>
+
             <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
               <Clock size={13} color="#818cf8" />
               Pacing: Every {engineHealth.pacingInterval || '25s'}
@@ -154,6 +214,26 @@ export const Dashboard = ({
           <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: '1.5' }}>
             Real-time status of <b>daily scraped prospects</b>, <b>live approved outreach</b>, and <b>email delivery analytics</b>.
           </p>
+
+          {!isAutomationActive && (
+            <div style={{
+              marginTop: '12px',
+              padding: '8px 14px',
+              background: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              borderRadius: '8px',
+              fontSize: '0.8rem',
+              color: '#fef3c7',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <AlertCircle size={15} color="#f59e0b" style={{ flexShrink: 0 }} />
+              <span>
+                <b>Auto-fetch leads & auto-send emails are currently stopped.</b> You have full control to discover leads, approve pitches, or send emails manually. Click <b>Resume Automation</b> anytime to re-enable background workers.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Quick Trigger Buttons */}

@@ -46,6 +46,8 @@ import { getDashboardStats } from '../controllers/analyticsController.js';
 import {
   getSettings,
   updateSettings,
+  getAutomationStatus,
+  toggleAutomation,
   testGeminiKey,
   testOpenRouterKey,
   testTelegramBot,
@@ -118,6 +120,8 @@ router.delete('/deals/:id', deleteDeal);
 // Settings & Integration Tests
 router.get('/settings', getSettings);
 router.post('/settings', updateSettings);
+router.get('/settings/automation-status', getAutomationStatus);
+router.post('/settings/toggle-automation', toggleAutomation);
 router.post('/settings/test-gemini', testGeminiKey);
 router.post('/settings/test-openrouter', testOpenRouterKey);
 router.post('/settings/test-telegram', testTelegramBot);

@@ -306,10 +306,13 @@ export const getDashboardStats = async (req, res) => {
     ]);
 
     // 8. Notifications & Engine Settings
-    const [recentNotifications, autoApproveSetting] = await Promise.all([
+    const [recentNotifications, autoApproveSetting, automationStatusSetting] = await Promise.all([
       Notification.find().sort({ created_at: -1 }).limit(10),
-      Setting.findOne({ key: 'auto_approve_outreach' })
+      Setting.findOne({ key: 'auto_approve_outreach' }),
+      Setting.findOne({ key: 'automation_status' })
     ]);
+
+    const isAutomationActive = automationStatusSetting ? automationStatusSetting.value !== 'PAUSED' : true;
 
     // Conversion rates
     const qualificationRate = totalLeads > 0 ? Math.round((qualifiedLeads / totalLeads) * 100) : 0;
@@ -387,7 +390,9 @@ export const getDashboardStats = async (req, res) => {
         statusBreakdown,
         recentActivity: recentActivity.slice(0, 12),
         engineHealth: {
-          workerStatus: 'ONLINE',
+          workerStatus: isAutomationActive ? 'ONLINE' : 'PAUSED',
+          automationStatus: isAutomationActive ? 'RUNNING' : 'PAUSED',
+          automationActive: isAutomationActive,
           autoApproveActive: autoApproveSetting ? autoApproveSetting.value === true : true,
           pacingInterval: '25 seconds',
           dailyQuota: 50,

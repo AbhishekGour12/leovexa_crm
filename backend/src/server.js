@@ -67,13 +67,16 @@ const startServer = async () => {
         pass: isGmail ? (configMap.gmail_app_password || process.env.GMAIL_APP_PASSWORD) : (configMap.smtp_pass || process.env.SMTP_PASS),
         senderName: configMap.sender_name || process.env.SENDER_NAME || 'Leovexa Technologies',
         senderEmail: configMap.sender_email || process.env.SENDER_EMAIL || (isGmail ? configMap.gmail_user : 'noreply@leovexa.in'),
-        zeptomailApiKey: configMap.zeptomail_api_key || process.env.ZEPTOMAIL_API_KEY
+        zeptomailApiKey: configMap.zeptomail_api_key || process.env.ZEPTOMAIL_API_KEY,
+        gmailUser: configMap.gmail_user || process.env.GMAIL_USER || 'leovexatechnologies@gmail.com',
+        gmailPass: configMap.gmail_app_password || process.env.GMAIL_APP_PASSWORD
       });
     } catch (e) {
       console.warn('Initial settings load notice:', e.message);
     }
 
-    // Start background queue worker
+    // Initialize Automation state (RUNNING vs PAUSED) and start background queue worker
+    await queueService.initAutomationState();
     queueService.startWorker();
 
     app.listen(PORT, () => {

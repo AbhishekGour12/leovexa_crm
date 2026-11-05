@@ -34,8 +34,46 @@ export const getSettings = async (req, res) => {
         sender_name: configMap.sender_name || process.env.SENDER_NAME || 'Leovexa Technologies',
         auto_approve_outreach: configMap.auto_approve_outreach !== undefined ? configMap.auto_approve_outreach : true,
         daily_discovery_enabled: configMap.daily_discovery_enabled !== undefined ? configMap.daily_discovery_enabled : true,
-        daily_leads_limit: configMap.daily_leads_limit || 50
+        daily_leads_limit: configMap.daily_leads_limit || 50,
+        automation_status: configMap.automation_status || 'RUNNING',
+        automation_active: configMap.automation_active !== undefined ? configMap.automation_active : true
       }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const getAutomationStatus = async (req, res) => {
+  try {
+    const { queueService } = await import('../services/queue.service.js');
+    const status = queueService.getAutomationStatus();
+    res.json({ success: true, ...status });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const toggleAutomation = async (req, res) => {
+  try {
+    const { action } = req.body; // 'PAUSE', 'RESUME', or 'TOGGLE'
+    const { queueService } = await import('../services/queue.service.js');
+    
+    const current = queueService.getAutomationStatus();
+    let result;
+
+    if (action === 'PAUSE' || (action === 'TOGGLE' && current.active)) {
+      result = await queueService.pauseAutomation();
+    } else {
+      result = await queueService.resumeAutomation();
+    }
+
+    res.json({
+      success: true,
+      message: result.active
+        ? '▶️ 24/7 Outreach Automation resumed! Auto-fetch leads and auto-send emails are active.'
+        : '⏸️ Outreach Automation stopped! Auto-fetch leads and auto-send emails are paused. You can still fetch leads or send emails manually.',
+      ...result
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -114,7 +152,9 @@ export const updateSettings = async (req, res) => {
       pass: isGmail ? gmail_app_password : smtp_pass,
       senderName: sender_name || 'Leovexa Technologies',
       senderEmail: sender_email || (isGmail ? gmail_user : 'noreply@leovexa.in'),
-      zeptomailApiKey: zeptomail_api_key
+      zeptomailApiKey: zeptomail_api_key,
+      gmailUser: gmail_user || process.env.GMAIL_USER || 'leovexatechnologies@gmail.com',
+      gmailPass: gmail_app_password || process.env.GMAIL_APP_PASSWORD
     });
 
     res.json({ success: true, message: 'Settings updated successfully' });
@@ -244,44 +284,85 @@ export const testTelegramBot = async (req, res) => {
 
 export const testEmailSmtp = async (req, res) => {
   try {
-    const { provider, host, port, user, pass } = req.body;
+    const { provider, host, port, user, pass, gmail_user, gmail_app_password } = req.body;
 
-    let transporter;
     if (provider === 'gmail') {
-      const testUser = user || process.env.GMAIL_USER;
-      const testPass = pass || process.env.GMAIL_APP_PASSWORD;
+      const testUser = user || gmail_user || process.env.GMAIL_USER;
+      const testPass = pass || gmail_app_password || process.env.GMAIL_APP_PASSWORD;
       if (!testUser || !testPass) {
         return res.status(400).json({ success: false, error: 'Gmail user email and 16-character App Password are required' });
       }
-      transporter = nodemailer.createTransport({
+      const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: { user: testUser, pass: testPass }
       });
-    } else {
-      // ZeptoMail or Custom SMTP
-      const testHost = host || process.env.SMTP_HOST || 'smtp.zeptomail.in';
-      const testPort = parseInt(port || process.env.SMTP_PORT || '587', 10);
-      const testUser = user || process.env.SMTP_USER || 'emailapikey';
-      const testPass = pass || process.env.SMTP_PASS;
-
-      if (!testHost || !testUser || !testPass) {
-        return res.status(400).json({ success: false, error: 'SMTP Host, Username, and Password are required' });
-      }
-
-      transporter = nodemailer.createTransport({
-        host: testHost,
-        port: testPort,
-        secure: testPort === 465,
-        auth: { user: testUser, pass: testPass },
-        tls: { rejectUnauthorized: false }
+      await transporter.verify();
+      return res.json({ 
+        success: true, 
+        message: '✅ Gmail SMTP authentication verified successfully! Outbound emails are 100% ready.' 
       });
     }
 
-    await transporter.verify();
-    res.json({ 
-      success: true, 
-      message: `${provider === 'gmail' ? 'Gmail SMTP' : 'Zoho ZeptoMail SMTP'} authentication verified successfully!` 
-    });
+    // ZeptoMail or Custom SMTP check
+    const testHost = host || process.env.SMTP_HOST || 'smtp.zeptomail.in';
+    const testPort = parseInt(port || process.env.SMTP_PORT || '587', 10);
+    const testUser = user || process.env.SMTP_USER || 'emailapikey';
+    const testPass = pass || process.env.SMTP_PASS;
+
+    let zeptoError = null;
+    let zeptoSuccess = false;
+
+    if (testHost && testUser && testPass) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: testHost,
+          port: testPort,
+          secure: testPort === 465,
+          auth: { user: testUser, pass: testPass },
+          tls: { rejectUnauthorized: false }
+        });
+        await transporter.verify();
+        zeptoSuccess = true;
+      } catch (err) {
+        zeptoError = err.message;
+      }
+    } else {
+      zeptoError = 'ZeptoMail credentials incomplete';
+    }
+
+    if (zeptoSuccess) {
+      return res.json({ 
+        success: true, 
+        message: '✅ Zoho ZeptoMail SMTP authentication verified successfully!' 
+      });
+    }
+
+    // ZeptoMail failed: Check if Gmail Fallback works!
+    const fallbackUser = (gmail_user || process.env.GMAIL_USER || 'leovexatechnologies@gmail.com').trim();
+    const fallbackPass = (gmail_app_password || process.env.GMAIL_APP_PASSWORD || '').trim();
+
+    if (fallbackUser && fallbackPass) {
+      try {
+        const gmailTrans = nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user: fallbackUser, pass: fallbackPass }
+        });
+        await gmailTrans.verify();
+
+        return res.json({
+          success: true,
+          fallbackActive: true,
+          message: `⚠️ ZeptoMail notice: ${zeptoError}. HOWEVER, Gmail Fallback (${fallbackUser}) is verified and ACTIVE! All outreach emails will automatically be delivered via Gmail.`
+        });
+      } catch (gErr) {
+        return res.status(400).json({
+          success: false,
+          error: `ZeptoMail failed: ${zeptoError} | Gmail Fallback also failed: ${gErr.message}. Please check Gmail App Password.`
+        });
+      }
+    }
+
+    res.status(400).json({ success: false, error: `SMTP Auth Failed: ${zeptoError}` });
   } catch (error) {
     res.status(400).json({ success: false, error: `SMTP Auth Failed: ${error.message}` });
   }

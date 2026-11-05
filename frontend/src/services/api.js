@@ -233,9 +233,23 @@ export const api = {
     return res.json();
   },
 
-  // Settings
+  // Settings & Automation Control
   async getSettings() {
     const res = await fetch(`${API_BASE}/settings`);
+    return res.json();
+  },
+
+  async getAutomationStatus() {
+    const res = await fetch(`${API_BASE}/settings/automation-status`);
+    return res.json();
+  },
+
+  async toggleAutomation(action = 'TOGGLE') {
+    const res = await fetch(`${API_BASE}/settings/toggle-automation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    });
     return res.json();
   },
 

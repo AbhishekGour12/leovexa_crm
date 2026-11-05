@@ -33,6 +33,11 @@ export function App() {
   const [selectedApprovalMsg, setSelectedApprovalMsg] = useState(null);
   const [showNewLeadModal, setShowNewLeadModal] = useState(false);
   const [showNewCampaignModal, setShowNewCampaignModal] = useState(false);
+  const [isTogglingAutomation, setIsTogglingAutomation] = useState(false);
+
+  const automationActive = dashboardData?.engineHealth?.automationActive !== undefined 
+    ? dashboardData.engineHealth.automationActive 
+    : true;
 
   useEffect(() => {
     fetchAllData();
@@ -120,6 +125,23 @@ export function App() {
       fetchAllData();
     } catch (e) {
       alert(`Error fetching daily leads: ${e.message}`);
+    }
+  };
+
+  const handleToggleAutomation = async (action) => {
+    setIsTogglingAutomation(true);
+    try {
+      const res = await api.toggleAutomation(action);
+      if (res.success) {
+        alert(res.message);
+        fetchAllData();
+      } else {
+        alert(`Error: ${res.error || 'Failed to toggle automation'}`);
+      }
+    } catch (e) {
+      alert(`Toggle automation error: ${e.message}`);
+    } finally {
+      setIsTogglingAutomation(false);
     }
   };
 
@@ -262,6 +284,9 @@ export function App() {
           onOpenNewCampaign={() => setShowNewCampaignModal(true)}
           onSeedDemo={handleSeedDemo}
           notifications={dashboardData.notifications || []}
+          automationActive={automationActive}
+          onToggleAutomation={handleToggleAutomation}
+          isTogglingAutomation={isTogglingAutomation}
         />
 
         <main className="content-body">
@@ -274,6 +299,9 @@ export function App() {
               onSeedDemo={handleSeedDemo}
               onAiDiscover={handleAiDiscover}
               onOpenNewLead={() => setShowNewLeadModal(true)}
+              onTriggerDailyLeads={handleTriggerDailyLeads}
+              onToggleAutomation={handleToggleAutomation}
+              isTogglingAutomation={isTogglingAutomation}
             />
           )}
 

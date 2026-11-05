@@ -13,8 +13,73 @@ import { greenhouseService } from './greenhouse.service.js';
 class QueueService {
   constructor() {
     this.isRunning = false;
+    this.isPaused = false;
     this.interval = null;
     this.lastDailyRunDate = null;
+  }
+
+  // Hydrate persistent automation status from DB on server startup
+  async initAutomationState() {
+    try {
+      const statusSetting = await Setting.findOne({ key: 'automation_status' });
+      const activeSetting = await Setting.findOne({ key: 'automation_active' });
+      if ((statusSetting && statusSetting.value === 'PAUSED') || (activeSetting && activeSetting.value === false)) {
+        this.isPaused = true;
+        console.log('⏸️ Autonomous Outreach Worker initialized in PAUSED state (Manual Mode)');
+      } else {
+        this.isPaused = false;
+        console.log('▶️ Autonomous Outreach Worker initialized in RUNNING state (24/7 Active)');
+      }
+    } catch (e) {
+      console.warn('Automation state hydration notice:', e.message);
+    }
+  }
+
+  async pauseAutomation() {
+    this.isPaused = true;
+    try {
+      await Setting.findOneAndUpdate(
+        { key: 'automation_status' },
+        { value: 'PAUSED', updated_at: new Date() },
+        { upsert: true }
+      );
+      await Setting.findOneAndUpdate(
+        { key: 'automation_active' },
+        { value: false, updated_at: new Date() },
+        { upsert: true }
+      );
+    } catch (e) {
+      console.warn('Error persisting pause state:', e.message);
+    }
+    console.log('⏸️ Outreach Automation STOPPED by user. Auto-fetch and auto-send are paused.');
+    return { status: 'PAUSED', active: false };
+  }
+
+  async resumeAutomation() {
+    this.isPaused = false;
+    try {
+      await Setting.findOneAndUpdate(
+        { key: 'automation_status' },
+        { value: 'RUNNING', updated_at: new Date() },
+        { upsert: true }
+      );
+      await Setting.findOneAndUpdate(
+        { key: 'automation_active' },
+        { value: true, updated_at: new Date() },
+        { upsert: true }
+      );
+    } catch (e) {
+      console.warn('Error persisting resume state:', e.message);
+    }
+    console.log('▶️ Outreach Automation RESUMED by user. 24/7 background worker active.');
+    return { status: 'RUNNING', active: true };
+  }
+
+  getAutomationStatus() {
+    return {
+      status: this.isPaused ? 'PAUSED' : 'RUNNING',
+      active: !this.isPaused
+    };
   }
 
   startWorker() {
@@ -26,6 +91,11 @@ class QueueService {
     this.interval = setInterval(async () => {
       // Guard: Only run background queue if MongoDB connection is active
       if (mongoose.connection.readyState !== 1) {
+        return;
+      }
+
+      // If automation is paused by user, skip auto-fetching leads & auto-sending emails
+      if (this.isPaused) {
         return;
       }
 
@@ -45,6 +115,8 @@ class QueueService {
   // Auto-Approve Mode: Automatically approves high-scoring qualified pitches
   async processAutoApprovals() {
     try {
+      if (this.isPaused) return;
+
       const autoApproveSetting = await Setting.findOne({ key: 'auto_approve_outreach' });
       const isAutoApprove = autoApproveSetting ? autoApproveSetting.value === true : true; // default ON for fully autonomous experience
 
@@ -142,6 +214,10 @@ class QueueService {
 
     try {
       if (!force) {
+        if (this.isPaused) {
+          console.log(`⏸️ [DAILY CYCLE SKIPPED] Automation is paused. Auto-fetch leads is stopped.`);
+          return 0;
+        }
         const lastRunSetting = await Setting.findOne({ key: 'last_daily_run_date' });
         if (lastRunSetting && lastRunSetting.value === todayStr) {
           console.log(`ℹ️ Daily lead quota already fulfilled for ${todayStr}.`);
@@ -330,8 +406,12 @@ class QueueService {
   }
 
   // Send approved emails via email service (spaced out safely, prioritizing manual leads)
-  async processApprovedOutreachQueue(batchLimit = 10) {
+  async processApprovedOutreachQueue(batchLimit = 10, force = false) {
     try {
+      if (!force && this.isPaused) {
+        return 0; // Automation paused: auto-sending emails is stopped
+      }
+
       // Find approved messages, prioritizing manual imports first
       const approvedMessages = await Message.find({ status: 'APPROVED' })
         .populate('lead_id')
@@ -376,6 +456,8 @@ class QueueService {
   // Check if any leads need Day 3 or Day 7 follow-up
   async checkScheduledFollowUps() {
     try {
+      if (this.isPaused) return;
+
       const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
       const leadsForFollowup = await Lead.find({
         status: 'CONTACTED',

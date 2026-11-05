@@ -14,15 +14,21 @@ class EmailService {
     this.provider = process.env.SMTP_PROVIDER || (process.env.SMTP_HOST ? 'custom_smtp' : (process.env.GMAIL_USER ? 'gmail' : 'zeptomail'));
     this.host = process.env.SMTP_HOST || 'smtp.zeptomail.in';
     this.port = parseInt(process.env.SMTP_PORT || '587', 10);
-    this.user = process.env.SMTP_USER || process.env.GMAIL_USER || 'emailapikey';
-    this.pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '';
+    this.user = process.env.SMTP_USER || 'emailapikey';
+    this.pass = process.env.SMTP_PASS || '';
     this.senderName = process.env.SENDER_NAME || 'Leovexa Technologies';
-    this.senderEmail = process.env.SENDER_EMAIL || process.env.GMAIL_USER || 'noreply@leovexa.in';
+    this.senderEmail = process.env.SENDER_EMAIL || 'noreply@leovexa.in';
     this.zeptomailApiKey = process.env.ZEPTOMAIL_API_KEY || '';
+
+    // Dedicated Gmail Fallback Credentials (Always ready if ZeptoMail has issues)
+    this.gmailUser = process.env.GMAIL_USER || 'leovexatechnologies@gmail.com';
+    this.gmailPass = process.env.GMAIL_APP_PASSWORD || 'pmfvirfagvcmwsob';
+
     this.transporter = null;
+    this.gmailTransporter = null;
   }
 
-  updateCredentials({ provider, host, port, user, pass, senderName, senderEmail, zeptomailApiKey }) {
+  updateCredentials({ provider, host, port, user, pass, senderName, senderEmail, zeptomailApiKey, gmailUser, gmailPass }) {
     if (provider !== undefined) this.provider = provider;
     if (host !== undefined) this.host = host;
     if (port !== undefined) this.port = parseInt(port || '587', 10);
@@ -31,9 +37,43 @@ class EmailService {
     if (senderName !== undefined) this.senderName = senderName;
     if (senderEmail !== undefined) this.senderEmail = senderEmail;
     if (zeptomailApiKey !== undefined) this.zeptomailApiKey = zeptomailApiKey;
+    if (gmailUser !== undefined) this.gmailUser = gmailUser;
+    if (gmailPass !== undefined) this.gmailPass = gmailPass;
 
-    // Reset transporter cache so next send re-initializes with new credentials
+    // Reset transporter caches so next send re-initializes with fresh credentials
     this.transporter = null;
+    this.gmailTransporter = null;
+  }
+
+  getGmailTransporter() {
+    if (this.gmailTransporter) {
+      return this.gmailTransporter;
+    }
+    const gUser = (this.gmailUser || process.env.GMAIL_USER || '').trim();
+    const gPass = (this.gmailPass || process.env.GMAIL_APP_PASSWORD || '').trim();
+
+    if (!gUser || !gPass) {
+      return null;
+    }
+
+    try {
+      this.gmailTransporter = nodemailer.createTransport({
+        service: 'gmail',
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
+        rateDelta: 1000,
+        rateLimit: 5,
+        auth: {
+          user: gUser,
+          pass: gPass,
+        },
+      });
+      return this.gmailTransporter;
+    } catch (e) {
+      console.error('Failed to create Gmail transporter:', e.message);
+      return null;
+    }
   }
 
   getTransporter() {
@@ -41,49 +81,73 @@ class EmailService {
       return this.transporter;
     }
 
+    if (this.provider === 'gmail') {
+      return this.getGmailTransporter();
+    }
+
     if (!this.user || !this.pass) {
       return null;
     }
 
     try {
-      if (this.provider === 'gmail') {
-        this.transporter = nodemailer.createTransport({
-          service: 'gmail',
-          pool: true,
-          maxConnections: 5,
-          maxMessages: 100,
-          rateDelta: 1000,
-          rateLimit: 5,
-          auth: {
-            user: this.user,
-            pass: this.pass,
-          },
-        });
-      } else {
-        // ZeptoMail / Zoho / Custom SMTP
-        const isSecure = this.port === 465;
-        this.transporter = nodemailer.createTransport({
-          host: this.host || 'smtp.zeptomail.in',
-          port: this.port || 587,
-          secure: isSecure,
-          pool: true,
-          maxConnections: 5,
-          maxMessages: 100,
-          auth: {
-            user: this.user,
-            pass: this.pass,
-          },
-          tls: {
-            rejectUnauthorized: false
-          }
-        });
-      }
+      // ZeptoMail / Zoho / Custom SMTP
+      const isSecure = this.port === 465;
+      this.transporter = nodemailer.createTransport({
+        host: this.host || 'smtp.zeptomail.in',
+        port: this.port || 587,
+        secure: isSecure,
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
+        auth: {
+          user: this.user,
+          pass: this.pass,
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
 
       return this.transporter;
     } catch (e) {
       console.error('Failed to create Nodemailer transporter:', e.message);
       return null;
     }
+  }
+
+  // Safe helper to dispatch directly via Gmail Transporter
+  async sendViaGmail({ to, subject, html, text, messageId = null, leadId = null, fallbackReason = '' }) {
+    const gmailTrans = this.getGmailTransporter();
+    if (!gmailTrans) {
+      throw new Error(`Gmail credentials missing or incomplete (User: ${this.gmailUser || 'Not set'})`);
+    }
+
+    const gUser = (this.gmailUser || process.env.GMAIL_USER || 'leovexatechnologies@gmail.com').trim();
+    const fromAddress = `"${this.senderName}" <${gUser}>`;
+
+    const info = await gmailTrans.sendMail({
+      from: fromAddress,
+      to,
+      subject,
+      text,
+      html: html || (text ? text.replace(/\n/g, '<br/>') : '')
+    });
+
+    if (messageId) {
+      await Message.findByIdAndUpdate(messageId, {
+        status: 'SENT',
+        sent_at: new Date(),
+        delivered_at: new Date(),
+        error_message: fallbackReason ? `Delivered via Gmail Fallback (${fallbackReason})` : ''
+      });
+    }
+
+    if (leadId) {
+      await Lead.findByIdAndUpdate(leadId, { status: 'CONTACTED' });
+    }
+
+    console.log(`✅ [GMAIL DISPATCH SUCCESS] Delivered to ${to} (MessageId: ${info.messageId}) ${fallbackReason ? `[Auto-Fallback triggered: ${fallbackReason}]` : ''}`);
+    return { success: true, messageId: info.messageId, provider: 'gmail', fallback: Boolean(fallbackReason) };
   }
 
   async sendEmail({ to, subject, html, text, messageId = null, leadId = null }) {
@@ -100,9 +164,29 @@ class EmailService {
       return { success: false, reason: mxCheck.reason, blocked: true };
     }
 
+    // Direct Gmail mode
+    if (this.provider === 'gmail') {
+      return await this.sendViaGmail({ to, subject, html, text, messageId, leadId });
+    }
+
+    // Primary provider mode (ZeptoMail / Custom SMTP) with seamless Gmail Fallback
     const transporter = this.getTransporter();
 
     if (!transporter) {
+      // Primary credentials missing: check if Gmail fallback is available
+      if (this.gmailUser && (this.gmailPass || process.env.GMAIL_APP_PASSWORD)) {
+        console.log(`ℹ️ [FALLBACK DIRECT] Primary SMTP credentials not set. Delivering directly via Gmail fallback...`);
+        return await this.sendViaGmail({
+          to,
+          subject,
+          html,
+          text,
+          messageId,
+          leadId,
+          fallbackReason: 'Primary SMTP not configured'
+        });
+      }
+
       console.log(`[EMAIL SIMULATION] Sending to ${to} | Subject: ${subject}`);
       if (messageId) {
         await Message.findByIdAndUpdate(messageId, {
@@ -145,16 +229,45 @@ class EmailService {
       }
 
       console.log(`✅ Email sent successfully to ${to} (MessageId: ${info.messageId}) via ${this.provider}`);
-      return { success: true, messageId: info.messageId, simulated: false };
-    } catch (error) {
-      console.error(`❌ Email send failed to ${to}:`, error.message);
+      return { success: true, messageId: info.messageId, provider: this.provider, simulated: false };
+    } catch (primaryError) {
+      console.warn(`⚠️ [PRIMARY EMAIL NOTICE] ${this.provider} dispatch failed for ${to}: ${primaryError.message}`);
+
+      // 🔄 AUTOMATIC BULLETPROOF FALLBACK TO GMAIL:
+      const hasGmailCreds = Boolean(this.gmailUser && (this.gmailPass || process.env.GMAIL_APP_PASSWORD));
+      if (hasGmailCreds) {
+        console.log(`🔄 [AUTO-FALLBACK ACTIVATED] Sending via Gmail to ${to} (${this.gmailUser})...`);
+        try {
+          return await this.sendViaGmail({
+            to,
+            subject,
+            html,
+            text,
+            messageId,
+            leadId,
+            fallbackReason: `${this.provider} failed (${primaryError.message.substring(0, 100)})`
+          });
+        } catch (gmailError) {
+          console.error(`❌ Both ${this.provider} and Gmail Fallback failed for ${to}:`, gmailError.message);
+          const fullErrMsg = `Primary (${this.provider}) failed: ${primaryError.message} | Gmail fallback failed: ${gmailError.message}`;
+          if (messageId) {
+            await Message.findByIdAndUpdate(messageId, {
+              status: 'FAILED',
+              error_message: fullErrMsg
+            });
+          }
+          throw new Error(fullErrMsg);
+        }
+      }
+
+      // If Gmail fallback is not configured, mark FAILED and throw
       if (messageId) {
         await Message.findByIdAndUpdate(messageId, {
           status: 'FAILED',
-          error_message: error.message
+          error_message: primaryError.message
         });
       }
-      throw error;
+      throw primaryError;
     }
   }
 
